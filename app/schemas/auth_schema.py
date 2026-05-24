@@ -23,7 +23,9 @@ class RefreshTokenRequest(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
+    username: str | None = Field(default=None, min_length=3, max_length=30)
     interests: list[str] | None = None
+    avatar_url: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -31,7 +33,9 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     name: str
+    username: str
     email: EmailStr
     role: UserRole
     interests: list[str]
+    avatar_url: str | None = None
     created_at: datetime

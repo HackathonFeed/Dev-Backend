@@ -24,10 +24,16 @@ cp .env.example .env
 uv sync
 ```
 
-4. Run database migrations (creates `users`, `bookmarks`, `analytics_events`, `search_logs`):
+4. Run database migrations (creates user tables, bookmarks, analytics, and tracked projects):
 
 ```bash
 uv run alembic upgrade head
+```
+
+Or run `database/backend_schema.sql` in the Supabase SQL Editor, then verify:
+
+```bash
+uv run python scripts/verify_tables.py
 ```
 
 5. Start the API:
@@ -46,6 +52,7 @@ Open Swagger docs at `http://localhost:8000/docs`.
 | Users | `GET/PATCH /api/v1/users/me` |
 | Hackathons | `GET /api/v1/hackathons`, `/search`, `/trending`, `/{id}` |
 | Bookmarks | `POST/GET/DELETE /api/v1/bookmarks` |
+| Tracked projects | `GET/POST/PATCH/DELETE /api/v1/tracked-projects`, register, steps, milestones, notes, team |
 | Themes | `GET /api/v1/themes`, `/themes/platforms` |
 | Trends | `GET /api/v1/trends/hackathons`, `/themes`, `/platforms` |
 | Admin | `GET /api/v1/admin/stats`, `POST /scrape`, `DELETE /hackathon/{id}` |

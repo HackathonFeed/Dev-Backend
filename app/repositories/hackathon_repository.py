@@ -1,12 +1,13 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import HackathonSort
 from app.models.hackathon_model import Hackathon
 from app.utils.date_utils import utc_today
+from app.utils.hackathon_status_utils import apply_status_date_filters
 
 
 class HackathonRepository:
@@ -25,10 +26,9 @@ class HackathonRepository:
         status: str | None = None,
     ):
         if status:
-            query = query.where(Hackathon.status == status)
+            query = apply_status_date_filters(query, only_open=False, status=status)
         elif only_open:
-            today = utc_today()
-            query = query.where(or_(Hackathon.deadline.is_(None), Hackathon.deadline >= today))
+            query = apply_status_date_filters(query, only_open=True)
 
         if platform:
             query = query.where(Hackathon.source_platform == platform.lower())
@@ -101,10 +101,9 @@ class HackathonRepository:
 
     async def get_trending(self, limit: int = 10) -> list[Hackathon]:
         today = utc_today()
+        query = apply_status_date_filters(select(Hackathon), only_open=True, today=today)
         query = (
-            select(Hackathon)
-            .where(or_(Hackathon.deadline.is_(None), Hackathon.deadline >= today))
-            .order_by(Hackathon.registrations.desc().nullslast(), Hackathon.deadline.asc().nullslast())
+            query.order_by(Hackathon.registrations.desc().nullslast(), Hackathon.deadline.asc().nullslast())
             .limit(limit)
         )
         result = await self.session.execute(query)
@@ -130,7 +129,12 @@ class HackathonRepository:
                 Hackathon.source_platform.label("platform"),
                 func.count().label("total_count"),
                 func.count()
-                .filter(or_(Hackathon.deadline.is_(None), Hackathon.deadline >= today))
+                .filter(
+                    and_(
+                        or_(Hackathon.deadline.is_(None), Hackathon.deadline >= today),
+                        or_(Hackathon.end_date.is_(None), Hackathon.end_date >= today),
+                    )
+                )
                 .label("open_count"),
             )
             .group_by(Hackathon.source_platform)

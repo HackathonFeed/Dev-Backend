@@ -13,7 +13,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-REQUIRED_TABLES = ("users", "bookmarks", "analytics_events", "search_logs")
+REQUIRED_TABLES = (
+    "users",
+    "bookmarks",
+    "analytics_events",
+    "search_logs",
+    "tracked_projects",
+    "tracked_project_steps",
+    "tracked_project_timeline_events",
+    "tracked_project_milestones",
+    "tracked_project_team_members",
+)
 
 
 def verify_rest_connection() -> tuple[bool, int]:
@@ -80,19 +90,46 @@ def main() -> int:
 
     missing = missing_tables()
     if not missing:
+        try:
+            from app.integrations.supabase_client import get_supabase_client
+
+            client = get_supabase_client()
+            client.table("users").select("avatar_url").limit(1).execute()
+            print("[OK] users.avatar_url")
+        except Exception:
+            print("[MISSING] users.avatar_url column")
+            print(f"\nRun in Supabase SQL Editor: {ROOT / 'database' / 'add_user_avatar_url.sql'}")
+            return 1
         print("\nAll backend tables are ready.")
         return 0
 
     if try_apply_schema_with_postgres():
         missing = missing_tables()
         if not missing:
+            try:
+                from app.integrations.supabase_client import get_supabase_client
+
+                client = get_supabase_client()
+                client.table("users").select("avatar_url").limit(1).execute()
+                print("[OK] users.avatar_url")
+            except Exception:
+                print("[MISSING] users.avatar_url column")
+                print(f"\nRun in Supabase SQL Editor: {ROOT / 'database' / 'add_user_avatar_url.sql'}")
+                return 1
             print("\nAll backend tables are ready.")
             return 0
 
     print("\nAction required:")
     print("1. Open Supabase Dashboard -> SQL Editor")
-    print(f"2. Run the SQL file: {ROOT / 'database' / 'backend_schema.sql'}")
-    print("3. Re-run: uv run python scripts/init_supabase.py")
+    tracked_only = [t for t in missing if t.startswith("tracked_")]
+    if tracked_only and len(tracked_only) == len(missing):
+        print(f"2. Run the SQL file: {ROOT / 'database' / 'tracked_projects_schema.sql'}")
+    else:
+        print(f"2. Run the SQL file: {ROOT / 'database' / 'backend_schema.sql'}")
+        if tracked_only:
+            print(f"   (or tracked tables only: {ROOT / 'database' / 'tracked_projects_schema.sql'})")
+    print(f"3. Run profile photo setup: {ROOT / 'database' / 'add_user_avatar_url.sql'}")
+    print("4. Re-run: uv run python scripts/init_supabase.py")
     return 1
 
 

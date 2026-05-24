@@ -1,9 +1,10 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.constants import EventMode, HackathonSort, RegistrationStatus, RegistrationStatus
+from app.utils.text_utils import normalize_hackathon_url
 
 
 class HackathonResponse(BaseModel):
@@ -22,6 +23,7 @@ class HackathonResponse(BaseModel):
     mode: EventMode
     location: str | None = None
     status: RegistrationStatus | None = None
+    status_label: str | None = None
     registrations: int | None = None
     eligibility: list[str] = Field(default_factory=list)
     team_size: str
@@ -30,6 +32,11 @@ class HackathonResponse(BaseModel):
     sponsors: list[str] = Field(default_factory=list)
     source_platform: str
     scraped_at: datetime | None = None
+
+    @field_validator("url")
+    @classmethod
+    def normalize_url(cls, value: str) -> str:
+        return normalize_hackathon_url(value)
 
 
 class HackathonFilterParams(BaseModel):

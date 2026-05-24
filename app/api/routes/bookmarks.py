@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.schemas.bookmark_schema import BookmarkResponse
 from app.schemas.response_schema import APIResponse
 from app.services.bookmark_service import BookmarkService
+from app.utils.bookmark_mapper import to_bookmark_response
 
 router = APIRouter(prefix="/bookmarks", tags=["Bookmarks"])
 
@@ -23,7 +24,7 @@ async def create_bookmark(
     return APIResponse(
         success=True,
         message="Hackathon bookmarked successfully",
-        data=BookmarkResponse.model_validate(bookmark),
+        data=to_bookmark_response(bookmark),
     )
 
 
@@ -37,7 +38,7 @@ async def list_bookmarks(
     return APIResponse(
         success=True,
         message="Bookmarks fetched successfully",
-        data=[BookmarkResponse.model_validate(item) for item in bookmarks],
+        data=[to_bookmark_response(item) for item in bookmarks],
     )
 
 

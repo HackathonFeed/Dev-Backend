@@ -40,6 +40,19 @@ def get_bookmark_repository(session: AsyncSession):
     return BookmarkRepository(session)
 
 
+def get_tracked_project_repository(session: AsyncSession):
+    settings = get_settings()
+    if settings.use_supabase_data_layer and is_supabase_configured():
+        from app.repositories.supabase_tracked_project_repository import (
+            SupabaseTrackedProjectRepository,
+        )
+
+        return SupabaseTrackedProjectRepository()
+    from app.repositories.tracked_project_repository import TrackedProjectRepository
+
+    return TrackedProjectRepository(session)
+
+
 class SupabaseAnalyticsRepository:
     """Best-effort analytics logging via Supabase REST."""
 

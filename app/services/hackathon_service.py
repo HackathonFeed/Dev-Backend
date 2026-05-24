@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.factory import get_analytics_repository, get_hackathon_repository
 from app.schemas.hackathon_schema import HackathonFilterParams, HackathonResponse, PlatformCount, ThemeCount
 from app.schemas.response_schema import PaginatedData
+from app.utils.hackathon_mapper import to_hackathon_response
 from app.utils.text_utils import normalize_search_query
 
 
@@ -57,7 +58,7 @@ class HackathonService:
 
         pages = max(1, ceil(total / filters.page_size)) if total else 0
         return PaginatedData(
-            items=[HackathonResponse.model_validate(item) for item in items],
+            items=[to_hackathon_response(item) for item in items],
             total=total,
             page=filters.page,
             page_size=filters.page_size,
@@ -77,11 +78,11 @@ class HackathonService:
             entity_type="hackathon",
             entity_id=str(hackathon_id),
         )
-        return HackathonResponse.model_validate(hackathon)
+        return to_hackathon_response(hackathon)
 
     async def get_trending(self, limit: int = 10) -> list[HackathonResponse]:
         items = await self.hackathons.get_trending(limit=limit)
-        return [HackathonResponse.model_validate(item) for item in items]
+        return [to_hackathon_response(item) for item in items]
 
     async def get_themes(self, limit: int = 30) -> list[ThemeCount]:
         rows = await self.hackathons.get_themes(limit=limit)

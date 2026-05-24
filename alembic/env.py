@@ -7,6 +7,13 @@ from app.core.config import get_settings
 from app.core.database import Base
 from app.models.analytics_model import AnalyticsEvent, SearchLog  # noqa: F401
 from app.models.bookmark_model import Bookmark  # noqa: F401
+from app.models.tracked_project_model import (  # noqa: F401
+    TrackedProject,
+    TrackedProjectMilestone,
+    TrackedProjectStep,
+    TrackedProjectTeamMember,
+    TrackedProjectTimelineEvent,
+)
 from app.models.user_model import User  # noqa: F401
 
 config = context.config

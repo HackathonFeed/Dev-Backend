@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -12,6 +14,7 @@ from app.core.config import get_settings
 from app.core.logger import setup_logging
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.rate_limit_middleware import RateLimitMiddleware
+from app.services.avatar_service import ensure_avatar_dir, uses_supabase_storage
 
 
 @asynccontextmanager
@@ -58,6 +61,10 @@ def create_app() -> FastAPI:
     app.add_middleware(RateLimitMiddleware)
 
     app.include_router(api_router, prefix=settings.api_prefix)
+
+    if not uses_supabase_storage():
+        uploads_dir = ensure_avatar_dir()
+        app.mount("/uploads", StaticFiles(directory=str(uploads_dir.parent)), name="uploads")
 
     @app.get("/health")
     async def health_check():

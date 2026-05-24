@@ -7,6 +7,8 @@ from app.core.constants import EventMode, HackathonSort, RegistrationStatus
 from app.integrations.supabase_client import get_supabase_client
 from app.models.hackathon_model import Hackathon
 from app.utils.date_utils import utc_today
+from app.utils.hackathon_status_utils import apply_supabase_status_date_filters, matches_status_filter
+from app.utils.text_utils import normalize_hackathon_url
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -29,7 +31,7 @@ def _row_to_hackathon(row: dict) -> Hackathon:
         title=row["title"],
         platform_id=row.get("platform_id"),
         organizer=row.get("organizer") or "Unknown",
-        url=row["url"],
+        url=normalize_hackathon_url(row["url"]),
         thumbnail=row.get("thumbnail"),
         start_date=_parse_date(row.get("start_date")),
         end_date=_parse_date(row.get("end_date")),
@@ -102,17 +104,29 @@ class SupabaseHackathonRepository:
                     },
                 ).execute()
                 rows = response.data or []
-                return [_row_to_hackathon(row) for row in rows], len(rows)
+                hackathons = [_row_to_hackathon(row) for row in rows]
+                filtered = [
+                    hackathon
+                    for hackathon in hackathons
+                    if matches_status_filter(
+                        start_date=hackathon.start_date,
+                        end_date=hackathon.end_date,
+                        deadline=hackathon.deadline,
+                        only_open=only_open,
+                        status=status,
+                    )
+                ]
+                return filtered, len(filtered)
 
             return await asyncio.to_thread(_search_rpc)
 
         def _fetch():
             query = self.client.table("hackathons").select("*", count="exact")
-            if status:
-                query = query.eq("status", status)
-            elif only_open:
-                today = utc_today().isoformat()
-                query = query.or_(f"deadline.is.null,deadline.gte.{today}")
+            query = apply_supabase_status_date_filters(
+                query,
+                only_open=only_open,
+                status=status,
+            )
             if platform:
                 query = query.eq("source_platform", platform.lower())
             if mode:
@@ -136,12 +150,10 @@ class SupabaseHackathonRepository:
 
     async def get_trending(self, limit: int = 10) -> list[Hackathon]:
         def _fetch():
-            today = utc_today().isoformat()
+            query = self.client.table("hackathons").select("*")
+            query = apply_supabase_status_date_filters(query, only_open=True)
             response = (
-                self.client.table("hackathons")
-                .select("*")
-                .or_(f"deadline.is.null,deadline.gte.{today}")
-                .order("registrations", desc=True)
+                query.order("registrations", desc=True)
                 .order("deadline", desc=False)
                 .limit(limit)
                 .execute()
