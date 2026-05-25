@@ -1,5 +1,6 @@
-# Backend-only Render deploy (if this repo is deployed without Frontend/)
-# Dashboard → New → Web Service → connect repo → set Root Directory: (repo root)
+# Backend-only Render Blueprint (if Backend/ is deployed as its own repo)
+#
+# Dashboard → New → Blueprint → Root Directory: Backend
 
 services:
   - type: web
@@ -7,7 +8,7 @@ services:
     runtime: python
     region: oregon
     plan: free
-    buildCommand: pip install .
+    buildCommand: pip install --upgrade pip && pip install .
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -15,13 +16,21 @@ services:
         value: "3.11.9"
       - key: ENVIRONMENT
         value: production
+      - key: DEBUG
+        value: "false"
+      - key: API_PREFIX
+        value: /api/v1
       - key: PREFER_SUPABASE_REST
         value: "true"
+      - key: USE_SUPABASE_HACKATHONS
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
-      - key: CORS_ORIGINS
-        sync: false
