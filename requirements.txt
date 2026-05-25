@@ -1,15 +1,222 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-sqlalchemy[asyncio]>=2.0.36
-asyncpg>=0.30.0
-pydantic[email]>=2.10.0
-pydantic-settings>=2.6.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.0,<5.0.0
-python-multipart>=0.0.12
-loguru>=0.7.3
-alembic>=1.14.0
-psycopg2-binary>=2.9.10
-supabase>=2.10.0
-httpx>=0.28.0
+# Vercel deployment uses pip + this file (uv is NOT available on Vercel).
+# Regenerate locally when pyproject.toml changes:
+#   uv pip compile pyproject.toml -o requirements.txt
+# Then remove any Windows-only lines (e.g. win32-setctime) before pushing.
+alembic==1.18.4
+    # via hackathonfeed-backend (pyproject.toml)
+annotated-doc==0.0.4
+    # via fastapi
+annotated-types==0.7.0
+    # via pydantic
+anyio==4.13.0
+    # via
+    #   httpx
+    #   starlette
+    #   watchfiles
+asyncpg==0.31.0
+    # via hackathonfeed-backend (pyproject.toml)
+bcrypt==4.3.0
+    # via
+    #   hackathonfeed-backend (pyproject.toml)
+    #   passlib
+cachetools==6.2.6
+    # via pyiceberg
+certifi==2026.5.20
+    # via
+    #   httpcore
+    #   httpx
+    #   requests
+cffi==2.0.0
+    # via cryptography
+charset-normalizer==3.4.7
+    # via requests
+click==8.4.1
+    # via
+    #   pyiceberg
+    #   uvicorn
+colorama==0.4.6
+    # via
+    #   click
+    #   loguru
+    #   uvicorn
+cryptography==48.0.0
+    # via
+    #   pyjwt
+    #   python-jose
+deprecation==2.1.0
+    # via
+    #   postgrest
+    #   storage3
+dnspython==2.8.0
+    # via email-validator
+ecdsa==0.19.2
+    # via python-jose
+email-validator==2.3.0
+    # via pydantic
+fastapi==0.136.3
+    # via hackathonfeed-backend (pyproject.toml)
+fsspec==2026.4.0
+    # via pyiceberg
+greenlet==3.5.1
+    # via sqlalchemy
+h11==0.16.0
+    # via
+    #   httpcore
+    #   uvicorn
+h2==4.3.0
+    # via httpx
+hpack==4.1.0
+    # via h2
+httpcore==1.0.9
+    # via httpx
+httptools==0.7.1
+    # via uvicorn
+httpx==0.28.1
+    # via
+    #   hackathonfeed-backend (pyproject.toml)
+    #   postgrest
+    #   storage3
+    #   supabase
+    #   supabase-auth
+    #   supabase-functions
+hyperframe==6.1.0
+    # via h2
+idna==3.16
+    # via
+    #   anyio
+    #   email-validator
+    #   httpx
+    #   requests
+    #   yarl
+loguru==0.7.3
+    # via hackathonfeed-backend (pyproject.toml)
+mako==1.3.12
+    # via alembic
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.3
+    # via mako
+mdurl==0.1.2
+    # via markdown-it-py
+mmh3==5.2.1
+    # via pyiceberg
+multidict==6.7.1
+    # via yarl
+packaging==26.2
+    # via deprecation
+passlib==1.7.4
+    # via hackathonfeed-backend (pyproject.toml)
+postgrest==2.30.0
+    # via supabase
+propcache==0.5.2
+    # via yarl
+psycopg2-binary==2.9.12
+    # via hackathonfeed-backend (pyproject.toml)
+pyasn1==0.6.3
+    # via
+    #   python-jose
+    #   rsa
+pycparser==3.0
+    # via cffi
+pydantic==2.13.4
+    # via
+    #   hackathonfeed-backend (pyproject.toml)
+    #   fastapi
+    #   postgrest
+    #   pydantic-settings
+    #   pyiceberg
+    #   realtime
+    #   storage3
+    #   supabase-auth
+pydantic-core==2.46.4
+    # via pydantic
+pydantic-settings==2.14.1
+    # via hackathonfeed-backend (pyproject.toml)
+pygments==2.20.0
+    # via rich
+pyiceberg==0.11.1
+    # via storage3
+pyjwt==2.13.0
+    # via supabase-auth
+pyparsing==3.3.2
+    # via pyiceberg
+pyroaring==1.1.0
+    # via pyiceberg
+python-dateutil==2.9.0.post0
+    # via strictyaml
+python-dotenv==1.2.2
+    # via
+    #   pydantic-settings
+    #   uvicorn
+python-jose==3.5.0
+    # via hackathonfeed-backend (pyproject.toml)
+python-multipart==0.0.29
+    # via hackathonfeed-backend (pyproject.toml)
+pyyaml==6.0.3
+    # via uvicorn
+realtime==2.30.0
+    # via supabase
+requests==2.34.2
+    # via pyiceberg
+rich==14.3.4
+    # via pyiceberg
+rsa==4.9.1
+    # via python-jose
+six==1.17.0
+    # via
+    #   ecdsa
+    #   python-dateutil
+sqlalchemy==2.0.50
+    # via
+    #   hackathonfeed-backend (pyproject.toml)
+    #   alembic
+starlette==1.1.0
+    # via fastapi
+storage3==2.30.0
+    # via supabase
+strenum==0.4.15
+    # via supabase-functions
+strictyaml==1.7.3
+    # via pyiceberg
+supabase==2.30.0
+    # via hackathonfeed-backend (pyproject.toml)
+supabase-auth==2.30.0
+    # via supabase
+supabase-functions==2.30.0
+    # via supabase
+tenacity==9.1.4
+    # via pyiceberg
+typing-extensions==4.15.0
+    # via
+    #   alembic
+    #   anyio
+    #   fastapi
+    #   pydantic
+    #   pydantic-core
+    #   realtime
+    #   sqlalchemy
+    #   starlette
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via
+    #   fastapi
+    #   pydantic
+    #   pydantic-settings
+urllib3==2.7.0
+    # via requests
+uvicorn==0.48.0
+    # via hackathonfeed-backend (pyproject.toml)
+watchfiles==1.2.0
+    # via uvicorn
+websockets==15.0.1
+    # via
+    #   realtime
+    #   uvicorn
+yarl==1.24.2
+    # via
+    #   postgrest
+    #   storage3
+    #   supabase
+    #   supabase-functions
+zstandard==0.25.0
+    # via pyiceberg

@@ -7,5 +7,6 @@ uploads/
 __pycache__/
 *.pyc
 .pytest_cache/
+uv.lock
 .venv/
 venv/
