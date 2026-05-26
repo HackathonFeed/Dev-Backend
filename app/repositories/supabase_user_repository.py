@@ -18,6 +18,10 @@ def _row_to_user(row: dict[str, Any]) -> User:
         interests=row.get("interests") or [],
     )
     user.avatar_url = row.get("avatar_url")
+    user.github_username = row.get("github_username")
+    user.linkedin_username = row.get("linkedin_username")
+    user.twitter_username = row.get("twitter_username")
+    user.website = row.get("website")
     user.created_at = row.get("created_at")
     user.updated_at = row.get("updated_at")
     return user
@@ -113,6 +117,10 @@ class SupabaseUserRepository:
                 "interests": user.interests or [],
                 "role": user.role.value,
                 "avatar_url": user.avatar_url,
+                "github_username": user.github_username,
+                "linkedin_username": user.linkedin_username,
+                "twitter_username": user.twitter_username,
+                "website": user.website,
             }
             response = (
                 self.client.table(self.TABLE)

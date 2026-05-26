@@ -26,6 +26,10 @@ class User(Base):
     )
     interests: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    github_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    linkedin_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    twitter_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

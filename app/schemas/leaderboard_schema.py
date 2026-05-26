@@ -23,6 +23,10 @@ class PublicUserProfileResponse(BaseModel):
     username: str
     interests: list[str]
     avatar_url: str | None = None
+    github_username: str | None = None
+    linkedin_username: str | None = None
+    twitter_username: str | None = None
+    website: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

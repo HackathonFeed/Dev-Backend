@@ -112,6 +112,14 @@ class AuthService:
             user.interests = [interest.strip() for interest in payload.interests if interest.strip()]
         if payload.avatar_url is not None:
             user.avatar_url = payload.avatar_url.strip() or None
+        if "github_username" in payload.model_fields_set:
+            user.github_username = payload.github_username
+        if "linkedin_username" in payload.model_fields_set:
+            user.linkedin_username = payload.linkedin_username
+        if "twitter_username" in payload.model_fields_set:
+            user.twitter_username = payload.twitter_username
+        if "website" in payload.model_fields_set:
+            user.website = payload.website
 
         return await self.users.update(user)
 
