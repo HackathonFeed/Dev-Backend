@@ -1,12 +1,13 @@
 from fastapi import APIRouter
 
-from app.api.routes import admin, ai, auth, bookmarks, hackathons, platforms, themes, tracked_projects, trends, users
+from app.api.routes import admin, ai, auth, bookmarks, hackathons, platforms, projects, themes, tracked_projects, trends, users
 
 api_router = APIRouter()
 api_router.include_router(ai.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(hackathons.router)
+api_router.include_router(projects.router)
 api_router.include_router(bookmarks.router)
 api_router.include_router(tracked_projects.router)
 api_router.include_router(themes.router)
