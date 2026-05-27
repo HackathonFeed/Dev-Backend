@@ -102,8 +102,11 @@ class SupabaseUserRepository:
                 "password_hash": user.password_hash,
                 "role": user.role.value,
                 "interests": user.interests or [],
+                "avatar_url": user.avatar_url,
             }
             response = self.client.table(self.TABLE).insert(payload).execute()
+            if not response.data:
+                raise RuntimeError("Supabase did not return created user row")
             return _row_to_user(response.data[0])
 
         return await asyncio.to_thread(_create)

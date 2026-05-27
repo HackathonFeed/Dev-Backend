@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth_dependency import get_current_user
@@ -40,10 +40,18 @@ async def google_login(
     session: AsyncSession = Depends(get_db),
 ):
     service = AuthService(session)
-    _, access_token, refresh_token = await service.login_with_google(
-        id_token_value=payload.id_token,
-        access_token_value=payload.access_token,
-    )
+    try:
+        _, access_token, refresh_token = await service.login_with_google(
+            id_token_value=payload.id_token,
+            access_token_value=payload.access_token,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Google sign-in could not create a user session: {exc}",
+        ) from exc
     return APIResponse(
         success=True,
         message="Google sign-in successful",

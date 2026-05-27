@@ -1,5 +1,3 @@
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token
 import httpx
 
 from app.core.config import get_settings
@@ -9,8 +7,16 @@ class GoogleAuthError(ValueError):
     pass
 
 
+def _is_email_verified(value) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.lower() == "true"
+    return False
+
+
 def _normalize_google_profile(profile: dict) -> dict:
-    if not profile.get("email_verified"):
+    if not _is_email_verified(profile.get("email_verified")):
         raise GoogleAuthError("Google account email is not verified")
 
     email = (profile.get("email") or "").strip().lower()
@@ -29,21 +35,31 @@ def _normalize_google_profile(profile: dict) -> dict:
     }
 
 
-def verify_google_id_token(token: str) -> dict:
+def _validate_audience(tokeninfo: dict, client_id: str) -> None:
+    audience = tokeninfo.get("aud") or tokeninfo.get("azp")
+    if audience and audience != client_id:
+        raise GoogleAuthError("Google sign-in token was issued for another app")
+
+
+async def verify_google_id_token(token: str) -> dict:
     settings = get_settings()
     if not settings.google_client_id:
         raise GoogleAuthError("Google sign-in is not configured on the server")
 
     try:
-        idinfo = id_token.verify_oauth2_token(
-            token,
-            google_requests.Request(),
-            settings.google_client_id,
-        )
-    except ValueError as exc:
-        raise GoogleAuthError("Invalid or expired Google sign-in token") from exc
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+            )
+            if response.status_code != 200:
+                raise GoogleAuthError("Invalid or expired Google sign-in token")
 
-    return _normalize_google_profile(idinfo)
+            tokeninfo = response.json()
+            _validate_audience(tokeninfo, settings.google_client_id)
+            return _normalize_google_profile(tokeninfo)
+    except httpx.HTTPError as exc:
+        raise GoogleAuthError("Could not verify Google sign-in token") from exc
 
 
 async def verify_google_access_token(token: str) -> dict:
@@ -61,9 +77,7 @@ async def verify_google_access_token(token: str) -> dict:
                 raise GoogleAuthError("Invalid or expired Google sign-in token")
 
             tokeninfo = tokeninfo_response.json()
-            audience = tokeninfo.get("aud")
-            if audience and audience != settings.google_client_id:
-                raise GoogleAuthError("Google sign-in token was issued for another app")
+            _validate_audience(tokeninfo, settings.google_client_id)
 
             userinfo_response = await client.get(
                 "https://www.googleapis.com/oauth2/v3/userinfo",

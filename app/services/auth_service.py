@@ -57,7 +57,7 @@ class AuthService:
             if access_token_value:
                 profile = await verify_google_access_token(access_token_value)
             elif id_token_value:
-                profile = verify_google_id_token(id_token_value)
+                profile = await verify_google_id_token(id_token_value)
             else:
                 raise GoogleAuthError("A Google token is required")
         except GoogleAuthError as exc:
