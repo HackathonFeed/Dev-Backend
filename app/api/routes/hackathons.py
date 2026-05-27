@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import EventMode, HackathonSort, RegistrationStatus
+from app.core.constants import HackathonSort
 from app.core.database import get_db
 from app.schemas.hackathon_schema import HackathonFilterParams, HackathonResponse
 from app.schemas.response_schema import APIResponse, PaginatedData
@@ -17,12 +17,12 @@ async def list_hackathons(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     theme: str | None = None,
-    mode: EventMode | None = None,
+    mode: str | None = None,
     platform: str | None = None,
     search: str | None = None,
     sort: HackathonSort = HackathonSort.DEADLINE,
     only_open: bool = True,
-    status: RegistrationStatus | None = None,
+    status: str | None = None,
     session: AsyncSession = Depends(get_db),
 ):
     service = HackathonService(session)
@@ -51,11 +51,11 @@ async def search_hackathons(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     theme: str | None = None,
-    mode: EventMode | None = None,
+    mode: str | None = None,
     platform: str | None = None,
     sort: HackathonSort = HackathonSort.DEADLINE,
     only_open: bool = True,
-    status: RegistrationStatus | None = None,
+    status: str | None = None,
     session: AsyncSession = Depends(get_db),
 ):
     service = HackathonService(session)

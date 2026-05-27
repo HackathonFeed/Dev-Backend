@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from fastapi import HTTPException, status
@@ -15,6 +16,7 @@ from app.core.security import (
 from app.models.user_model import User
 from app.repositories.factory import get_user_repository
 from app.schemas.auth_schema import UserLoginRequest, UserRegisterRequest, UserUpdateRequest
+from app.utils.google_auth import GoogleAuthError, verify_google_access_token, verify_google_id_token
 from app.utils.username_utils import generate_username_candidate, validate_username_or_raise
 
 
@@ -42,6 +44,54 @@ class AuthService:
             role=UserRole.USER,
         )
         user = await self.users.create(user)
+        access_token = create_access_token(str(user.id), user.email, user.role)
+        refresh_token = create_refresh_token(str(user.id), user.email, user.role)
+        return user, access_token, refresh_token
+
+    async def login_with_google(
+        self,
+        id_token_value: str | None = None,
+        access_token_value: str | None = None,
+    ) -> tuple[User, str, str]:
+        try:
+            if access_token_value:
+                profile = await verify_google_access_token(access_token_value)
+            elif id_token_value:
+                profile = verify_google_id_token(id_token_value)
+            else:
+                raise GoogleAuthError("A Google token is required")
+        except GoogleAuthError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(exc),
+            ) from exc
+
+        user = await self.users.get_by_email(profile["email"])
+        if not user:
+            user_id = uuid.uuid4()
+            username = await self._generate_unique_username(profile["name"], user_id)
+            avatar_url = profile.get("picture") or None
+            user = User(
+                id=user_id,
+                name=profile["name"],
+                username=username,
+                email=profile["email"],
+                password_hash=hash_password(secrets.token_urlsafe(32)),
+                role=UserRole.USER,
+                avatar_url=avatar_url[:512] if avatar_url else None,
+            )
+            user = await self.users.create(user)
+        else:
+            updated = False
+            if profile.get("picture") and not user.avatar_url:
+                user.avatar_url = profile["picture"][:512]
+                updated = True
+            if profile["name"] and user.name != profile["name"]:
+                user.name = profile["name"]
+                updated = True
+            if updated:
+                user = await self.users.update(user)
+
         access_token = create_access_token(str(user.id), user.email, user.role)
         refresh_token = create_refresh_token(str(user.id), user.email, user.role)
         return user, access_token, refresh_token

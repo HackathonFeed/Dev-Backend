@@ -10,6 +10,12 @@ from app.utils.date_utils import utc_today
 from app.utils.hackathon_status_utils import apply_status_date_filters
 
 
+def _split_filter_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip().lower() for part in value.split(",") if part.strip()]
+
+
 class HackathonRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -25,19 +31,26 @@ class HackathonRepository:
         only_open: bool = True,
         status: str | None = None,
     ):
-        if status:
-            query = apply_status_date_filters(query, only_open=False, status=status)
+        status_values = _split_filter_values(status)
+        platform_values = _split_filter_values(platform)
+        mode_values = _split_filter_values(mode)
+        theme_values = [part.strip() for part in theme.split(",") if part.strip()] if theme else []
+
+        if len(status_values) == 1:
+            query = apply_status_date_filters(query, only_open=False, status=status_values[0])
+        elif len(status_values) > 1:
+            query = query.where(Hackathon.status.in_(status_values))
         elif only_open:
             query = apply_status_date_filters(query, only_open=True)
 
-        if platform:
-            query = query.where(Hackathon.source_platform == platform.lower())
+        if platform_values:
+            query = query.where(Hackathon.source_platform.in_(platform_values))
 
-        if mode:
-            query = query.where(Hackathon.mode == mode.lower())
+        if mode_values:
+            query = query.where(Hackathon.mode.in_(mode_values))
 
-        if theme:
-            query = query.where(Hackathon.categories.contains([theme]))
+        if theme_values:
+            query = query.where(or_(*(Hackathon.categories.contains([value]) for value in theme_values)))
 
         if search:
             pattern = f"%{search}%"

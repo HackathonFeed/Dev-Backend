@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.auth_dependency import get_current_user
 from app.core.database import get_db
 from app.schemas.auth_schema import (
+    GoogleLoginRequest,
     RefreshTokenRequest,
     UserLoginRequest,
     UserRegisterRequest,
@@ -25,6 +26,27 @@ async def register(
     return APIResponse(
         success=True,
         message="Registration successful",
+        data=TokenPayload(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=AuthService.token_expiry_seconds(),
+        ),
+    )
+
+
+@router.post("/google", response_model=APIResponse[TokenPayload])
+async def google_login(
+    payload: GoogleLoginRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    service = AuthService(session)
+    _, access_token, refresh_token = await service.login_with_google(
+        id_token_value=payload.id_token,
+        access_token_value=payload.access_token,
+    )
+    return APIResponse(
+        success=True,
+        message="Google sign-in successful",
         data=TokenPayload(
             access_token=access_token,
             refresh_token=refresh_token,

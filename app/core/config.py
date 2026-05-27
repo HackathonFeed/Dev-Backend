@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     prefer_supabase_rest: bool = True  # env: PREFER_SUPABASE_REST
 
     gemini_api_key: str | None = None
+    google_client_id: str | None = None
 
     @property
     def effective_supabase_key(self) -> str | None:

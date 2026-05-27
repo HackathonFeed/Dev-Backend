@@ -7,8 +7,15 @@ from app.core.constants import EventMode, HackathonSort, RegistrationStatus
 from app.integrations.supabase_client import get_supabase_client
 from app.models.hackathon_model import Hackathon
 from app.utils.date_utils import utc_today
-from app.utils.hackathon_status_utils import apply_supabase_status_date_filters, matches_status_filter
+from app.utils.hackathon_status_utils import apply_supabase_status_date_filters
 from app.utils.text_utils import normalize_hackathon_url
+
+
+def _split_filter_values(value: str | None, *, lower: bool = True) -> list[str]:
+    if not value:
+        return []
+    parts = [part.strip() for part in value.split(",") if part.strip()]
+    return [part.lower() for part in parts] if lower else parts
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -91,48 +98,39 @@ class SupabaseHackathonRepository:
     ) -> tuple[list[Hackathon], int]:
         offset = (page - 1) * page_size
 
-        if search or platform or mode:
-            def _search_rpc():
-                response = self.client.rpc(
-                    "search_hackathons",
-                    {
-                        "p_query": search,
-                        "p_platform": platform.lower() if platform else None,
-                        "p_mode": mode.lower() if mode else None,
-                        "p_limit": page_size,
-                        "p_offset": offset,
-                    },
-                ).execute()
-                rows = response.data or []
-                hackathons = [_row_to_hackathon(row) for row in rows]
-                filtered = [
-                    hackathon
-                    for hackathon in hackathons
-                    if matches_status_filter(
-                        start_date=hackathon.start_date,
-                        end_date=hackathon.end_date,
-                        deadline=hackathon.deadline,
-                        only_open=only_open,
-                        status=status,
-                    )
-                ]
-                return filtered, len(filtered)
-
-            return await asyncio.to_thread(_search_rpc)
-
         def _fetch():
+            status_values = _split_filter_values(status)
+            platform_values = _split_filter_values(platform)
+            mode_values = _split_filter_values(mode)
+            theme_values = _split_filter_values(theme, lower=False)
+
             query = self.client.table("hackathons").select("*", count="exact")
-            query = apply_supabase_status_date_filters(
-                query,
-                only_open=only_open,
-                status=status,
-            )
-            if platform:
-                query = query.eq("source_platform", platform.lower())
-            if mode:
-                query = query.eq("mode", mode.lower())
-            if theme:
-                query = query.contains("categories", [theme])
+            if len(status_values) == 1:
+                query = apply_supabase_status_date_filters(
+                    query,
+                    only_open=False,
+                    status=status_values[0],
+                )
+            elif len(status_values) > 1:
+                query = query.in_("status", status_values)
+            else:
+                query = apply_supabase_status_date_filters(
+                    query,
+                    only_open=only_open,
+                    status=None,
+                )
+            if platform_values:
+                query = query.in_("source_platform", platform_values)
+            if mode_values:
+                query = query.in_("mode", mode_values)
+            if theme_values:
+                if len(theme_values) == 1:
+                    query = query.contains("categories", [theme_values[0]])
+                else:
+                    query = query.overlaps("categories", theme_values)
+            if search:
+                escaped = search.replace("%", "\\%").replace(",", " ")
+                query = query.or_(f"title.ilike.%{escaped}%,organizer.ilike.%{escaped}%")
             if sort == HackathonSort.REGISTRATIONS:
                 query = query.order("registrations", desc=True)
             elif sort == HackathonSort.SCRAPED_AT:

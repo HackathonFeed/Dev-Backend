@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.core.constants import EventMode, HackathonSort, RegistrationStatus, RegistrationStatus
+from app.core.constants import EventMode, HackathonSort, RegistrationStatus
 from app.utils.text_utils import normalize_hackathon_url
 
 
@@ -43,12 +43,12 @@ class HackathonFilterParams(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
     theme: str | None = None
-    mode: EventMode | None = None
+    mode: str | None = None
     platform: str | None = None
     search: str | None = None
     sort: HackathonSort = HackathonSort.DEADLINE
     only_open: bool = True
-    status: RegistrationStatus | None = None
+    status: str | None = None
 
 
 class ThemeCount(BaseModel):

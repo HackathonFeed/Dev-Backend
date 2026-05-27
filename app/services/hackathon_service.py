@@ -37,11 +37,11 @@ class HackathonService:
             page_size=filters.page_size,
             search=search,
             platform=filters.platform,
-            mode=filters.mode.value if filters.mode else None,
+            mode=filters.mode,
             theme=filters.theme,
             sort=filters.sort,
             only_open=filters.only_open,
-            status=filters.status.value if filters.status else None,
+            status=filters.status,
         )
 
         if search or filters.platform or filters.mode or filters.theme:
@@ -49,7 +49,7 @@ class HackathonService:
                 query=search,
                 filters={
                     "platform": filters.platform,
-                    "mode": filters.mode.value if filters.mode else None,
+                    "mode": filters.mode,
                     "theme": filters.theme,
                     "sort": filters.sort.value,
                 },
