@@ -5,7 +5,7 @@ from app.repositories.factory import get_analytics_repository, get_hackathon_rep
 
 class AnalyticsService:
     def __init__(self, session: AsyncSession):
-        self.analytics = AnalyticsRepository(session)
+        self.analytics = get_analytics_repository(session)
         self.hackathons = get_hackathon_repository(session)
 
     async def get_dashboard_stats(self) -> dict:

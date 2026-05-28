@@ -124,6 +124,7 @@ class SupabaseUserRepository:
                 "name": user.name,
                 "username": user.username,
                 "email": user.email.lower(),
+                "password_hash": user.password_hash,
                 "interests": user.interests or [],
                 "role": user.role.value,
                 "avatar_url": user.avatar_url,
@@ -181,3 +182,84 @@ class SupabaseUserRepository:
         if result is None:
             return await self.get_by_id(user_id)
         return result
+
+    # ── Admin helpers ─────────────────────────────────────────────────────────
+
+    async def list_all(
+        self,
+        page: int = 1,
+        page_size: int = 25,
+        search: str = "",
+    ) -> tuple[list[User], int]:
+        """Return a page of users + total count. Optionally filter by search string."""
+        def _fetch():
+            query = self.client.table(self.TABLE).select("*", count="exact")
+            if search:
+                # Supabase PostgREST OR filter
+                query = query.or_(
+                    f"name.ilike.%{search}%,email.ilike.%{search}%,username.ilike.%{search}%"
+                )
+            offset = (page - 1) * page_size
+            response = (
+                query
+                .order("created_at", desc=True)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            users = [_row_to_user(row) for row in (response.data or [])]
+            total = response.count or 0
+            return users, total
+
+        return await asyncio.to_thread(_fetch)
+
+    async def update_role(self, user_id: uuid.UUID, role: str) -> User:
+        def _update():
+            response = (
+                self.client.table(self.TABLE)
+                .update({"role": role})
+                .eq("id", str(user_id))
+                .execute()
+            )
+            if not response.data:
+                raise RuntimeError("User not found")
+            return _row_to_user(response.data[0])
+
+        return await asyncio.to_thread(_update)
+
+    async def update_plan(self, user_id: uuid.UUID, plan: str, ai_points: int) -> User:
+        from datetime import datetime, timedelta, timezone
+        expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat() if plan != "hacker" else None
+        def _update():
+            response = (
+                self.client.table(self.TABLE)
+                .update({
+                    "subscription_plan": plan,
+                    "ai_points": ai_points,
+                    "plan_expires_at": expires,
+                })
+                .eq("id", str(user_id))
+                .execute()
+            )
+            if not response.data:
+                raise RuntimeError("User not found")
+            return _row_to_user(response.data[0])
+
+        return await asyncio.to_thread(_update)
+
+    async def delete_by_id(self, user_id: uuid.UUID) -> None:
+        def _delete():
+            self.client.table(self.TABLE).delete().eq("id", str(user_id)).execute()
+
+        await asyncio.to_thread(_delete)
+
+    async def count_by_plan(self) -> dict[str, int]:
+        """Return {plan: count} for all plans."""
+        def _fetch():
+            resp = self.client.table(self.TABLE).select("subscription_plan").execute()
+            counts: dict[str, int] = {}
+            for row in (resp.data or []):
+                p = row.get("subscription_plan", "hacker")
+                counts[p] = counts.get(p, 0) + 1
+            return counts
+
+        return await asyncio.to_thread(_fetch)

@@ -15,7 +15,7 @@ from app.core.security import (
     verify_token,
 )
 from app.models.user_model import User
-from app.repositories.factory import get_user_repository
+from app.repositories import factory as repository_factory
 from app.schemas.auth_schema import UserLoginRequest, UserRegisterRequest, UserUpdateRequest
 from app.utils.google_auth import GoogleAuthError, verify_google_access_token, verify_google_id_token
 from app.utils.username_utils import generate_username_candidate, validate_username_or_raise
@@ -23,7 +23,7 @@ from app.utils.username_utils import generate_username_candidate, validate_usern
 
 class AuthService:
     def __init__(self, session: AsyncSession):
-        self.users = get_user_repository(session)
+        self.users = repository_factory.get_user_repository(session)
 
     async def register(self, payload: UserRegisterRequest) -> tuple[User, str, str]:
         existing = await self.users.get_by_email(payload.email)

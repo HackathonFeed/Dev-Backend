@@ -59,6 +59,13 @@ class EmailService:
         asyncio.create_task(_send_async(to_email, subject, html))
 
     @staticmethod
+    def send_reset_code_bg(to_email: str, name: str, code: str) -> None:
+        """Schedule a password-reset OTP email (fire-and-forget)."""
+        html = _build_reset_code_email(name, code)
+        subject = f"Your HackathonFeed reset code: {code}"
+        asyncio.create_task(_send_async(to_email, subject, html))
+
+    @staticmethod
     def send_plan_upgrade_bg(
         to_email: str,
         name: str,
@@ -519,3 +526,133 @@ def _build_upgrade_email(
       </tr>
     """
     return _email_wrap(f"{plan_name} Plan Confirmed — HackathonFeed", body)
+
+
+# ── Password Reset OTP Email ──────────────────────────────────────────────────
+
+def _build_reset_code_email(name: str, code: str) -> str:
+    first = name.split()[0].upper() if name else "HACKER"
+    # Split code into individual digit spans for the big display
+    digit_cells = "".join(
+        f"""<td style="width:48px;height:60px;background:#fff;
+                      border:3px solid #1a1a1a;
+                      text-align:center;vertical-align:middle;
+                      font-family:'Arial Black',Arial,sans-serif;
+                      font-weight:900;font-size:30px;color:#1a1a1a;
+                      letter-spacing:-1px;padding:0 4px;">
+              {d}
+            </td>
+            <td width="6"></td>"""
+        for d in code
+    )
+    body = f"""
+      <!-- ── HERO ── -->
+      <tr>
+        <td style="background:#e63b2e;padding:44px 28px 40px;
+                   border-bottom:4px solid #1a1a1a;">
+          <p style="font-family:'Courier New',monospace;font-size:10px;
+                    font-weight:700;text-transform:uppercase;
+                    letter-spacing:3px;color:rgba(255,255,255,0.7);
+                    margin:0 0 10px;">
+            SECURITY VERIFICATION
+          </p>
+          <h1 style="font-family:'Arial Black',Arial,sans-serif;font-weight:900;
+                     font-size:42px;text-transform:uppercase;letter-spacing:-2px;
+                     color:#fff;margin:0;line-height:1;">
+            RESET CODE,<br/>{first}
+          </h1>
+          <p style="font-family:Arial,sans-serif;font-size:14px;font-weight:700;
+                    color:rgba(255,255,255,0.85);margin:14px 0 0;line-height:1.5;
+                    border-left:4px solid #ffcc00;padding-left:12px;">
+            Use this one-time code to reset your password.
+            It expires in <strong style="color:#ffcc00;">15 minutes</strong>.
+          </p>
+        </td>
+      </tr>
+
+      <!-- ── OTP CODE BOX ── -->
+      <tr>
+        <td style="background:#f5f0e8;padding:36px 28px 28px;">
+          <p style="font-family:'Courier New',monospace;font-size:9px;
+                    font-weight:700;text-transform:uppercase;letter-spacing:2.5px;
+                    color:rgba(0,0,0,0.4);margin:0 0 16px;">
+            YOUR ONE-TIME CODE
+          </p>
+          <table cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              {digit_cells}
+            </tr>
+          </table>
+          <p style="font-family:'Courier New',monospace;font-size:9px;
+                    font-weight:700;text-transform:uppercase;letter-spacing:1.5px;
+                    color:rgba(0,0,0,0.4);margin:16px 0 0;">
+            &#9200; Expires in 15 minutes
+          </p>
+        </td>
+      </tr>
+
+      <!-- ── INSTRUCTIONS ── -->
+      <tr>
+        <td style="background:#f5f0e8;padding:4px 28px 28px;">
+          <table cellpadding="0" cellspacing="0" border="0" width="100%"
+                 style="background:#fff;border:3px solid #1a1a1a;
+                        padding:18px 20px;box-shadow:4px 4px 0 #1a1a1a;">
+            <tr>
+              <td>
+                <p style="font-family:'Arial Black',Arial,sans-serif;font-weight:900;
+                          font-size:12px;text-transform:uppercase;color:#1a1a1a;
+                          margin:0 0 10px;">HOW TO USE THIS CODE</p>
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td width="20" valign="top"
+                        style="font-family:'Courier New',monospace;font-size:13px;
+                               font-weight:700;color:#e63b2e;padding-top:2px;">
+                      1.
+                    </td>
+                    <td style="font-family:Arial,sans-serif;font-size:12px;
+                               color:#444;padding-bottom:6px;line-height:1.5;font-weight:600;">
+                      Go back to the HackathonFeed login page.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="20" valign="top"
+                        style="font-family:'Courier New',monospace;font-size:13px;
+                               font-weight:700;color:#e63b2e;padding-top:2px;">
+                      2.
+                    </td>
+                    <td style="font-family:Arial,sans-serif;font-size:12px;
+                               color:#444;padding-bottom:6px;line-height:1.5;font-weight:600;">
+                      Enter the 6-digit code shown above.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td width="20" valign="top"
+                        style="font-family:'Courier New',monospace;font-size:13px;
+                               font-weight:700;color:#e63b2e;padding-top:2px;">
+                      3.
+                    </td>
+                    <td style="font-family:Arial,sans-serif;font-size:12px;
+                               color:#444;padding-bottom:6px;line-height:1.5;font-weight:600;">
+                      Set your new password. Done!
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- ── SECURITY NOTICE ── -->
+      <tr>
+        <td style="background:#f5f0e8;padding:0 28px 36px;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;
+                    color:#666666;margin:0;line-height:1.6;
+                    border-top:2px solid rgba(0,0,0,0.12);padding-top:16px;">
+            If you did not request a password reset, ignore this email —
+            your account remains secure. Never share this code with anyone.
+          </p>
+        </td>
+      </tr>
+    """
+    return _email_wrap("Password Reset Code — HackathonFeed", body)

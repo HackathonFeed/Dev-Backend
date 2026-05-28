@@ -22,11 +22,28 @@ def _reject_url_host(value: str, host_fragment: str, field_label: str) -> str:
     return value
 
 
+def _parse_urlish(value: str):
+    if "://" in value:
+        return urlparse(value)
+    return urlparse(f"https://{value}")
+
+
+def _path_segments(parsed) -> list[str]:
+    return [segment for segment in parsed.path.split("/") if segment]
+
+
 def normalize_github_username(value: str) -> str:
+    field_label = "GitHub username"
     cleaned = value.strip().lstrip("@").strip("/")
-    cleaned = re.sub(r"^https?://", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"^(?:www\.)?github\.com/", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.split("/")[0].split("?")[0].strip()
+    parsed = _parse_urlish(cleaned)
+    host = parsed.netloc.lower().removeprefix("www.")
+    if host == "github.com":
+        segments = _path_segments(parsed)
+        if len(segments) != 1:
+            raise ValueError(f"{field_label} must be a username only, not a full URL.")
+        cleaned = segments[0]
+    else:
+        cleaned = cleaned.split("?")[0].strip()
     _reject_url_host(cleaned, "github.com", "GitHub username")
     if not cleaned:
         raise ValueError("GitHub username cannot be empty.")
@@ -38,11 +55,18 @@ def normalize_github_username(value: str) -> str:
 
 
 def normalize_linkedin_username(value: str) -> str:
+    field_label = "LinkedIn username"
     cleaned = value.strip().lstrip("@").strip("/")
-    cleaned = re.sub(r"^https?://", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"^(?:www\.)?linkedin\.com/in/", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.split("/")[0].split("?")[0].strip()
-    _reject_url_host(cleaned, "linkedin.com", "LinkedIn username")
+    parsed = _parse_urlish(cleaned)
+    host = parsed.netloc.lower().removeprefix("www.")
+    if host == "linkedin.com":
+        segments = _path_segments(parsed)
+        if len(segments) != 2 or segments[0].lower() != "in":
+            raise ValueError(f"{field_label} must be a username only, not a full URL.")
+        cleaned = segments[1]
+    else:
+        cleaned = cleaned.split("?")[0].strip()
+    _reject_url_host(cleaned, "linkedin.com", field_label)
     if not cleaned:
         raise ValueError("LinkedIn username cannot be empty.")
     if not LINKEDIN_USERNAME_PATTERN.fullmatch(cleaned):
@@ -53,10 +77,17 @@ def normalize_linkedin_username(value: str) -> str:
 
 
 def normalize_twitter_username(value: str) -> str:
+    field_label = "Twitter username"
     cleaned = value.strip().lstrip("@").strip("/")
-    cleaned = re.sub(r"^https?://", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"^(?:www\.)?(?:twitter|x)\.com/", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.split("/")[0].split("?")[0].strip()
+    parsed = _parse_urlish(cleaned)
+    host = parsed.netloc.lower().removeprefix("www.")
+    if host in {"twitter.com", "x.com"}:
+        segments = _path_segments(parsed)
+        if len(segments) != 1:
+            raise ValueError(f"{field_label} must be a username only, not a full URL.")
+        cleaned = segments[0]
+    else:
+        cleaned = cleaned.split("?")[0].strip()
     if "twitter.com" in cleaned.lower() or "x.com" in cleaned.lower():
         raise ValueError("Twitter username must be a username only, not a full URL.")
     if not cleaned:

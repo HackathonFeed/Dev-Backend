@@ -28,6 +28,8 @@ def normalize_username(value: str) -> str:
 
 def is_valid_username(value: str) -> bool:
     normalized = normalize_username(value)
+    if value != normalized:
+        return False
     if not USERNAME_PATTERN.fullmatch(normalized):
         return False
     return normalized not in RESERVED_USERNAMES
