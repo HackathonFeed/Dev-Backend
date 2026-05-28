@@ -16,7 +16,7 @@ class SubscriptionPlan(StrEnum):
 # Points granted per plan (−1 = unlimited)
 PLAN_POINTS: dict[str, int] = {
     SubscriptionPlan.HACKER: 50,
-    SubscriptionPlan.BUILDER: 500,
+    SubscriptionPlan.BUILDER: 200,
     SubscriptionPlan.CHAMPION: -1,
 }
 

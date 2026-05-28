@@ -155,8 +155,10 @@ class SubscriptionService:
             )
 
         msg = f"{order_id}|{payment_id}".encode()
+        # Strip whitespace — .env files sometimes introduce spaces in app passwords
+        key_secret = settings.razorpay_key_secret.strip().replace(" ", "")
         expected = hmac.new(
-            settings.razorpay_key_secret.encode(),
+            key_secret.encode(),
             msg,
             hashlib.sha256,
         ).hexdigest()

@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
 
+    # SMTP (Gmail)
+    smtp_email: str | None = None
+    smtp_password: str | None = None   # Gmail App Password
+    smtp_from_name: str = "HackathonFeed"
+
     @property
     def effective_supabase_key(self) -> str | None:
         return self.supabase_service_key or self.supabase_key

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.constants import PLAN_POINTS, SubscriptionPlan, UserRole
+from app.services.email_service import EmailService
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -46,6 +47,8 @@ class AuthService:
             ai_points=PLAN_POINTS[SubscriptionPlan.HACKER],
         )
         user = await self.users.create(user)
+        # Fire-and-forget welcome email
+        EmailService.send_welcome_bg(user.email, user.name)
         access_token = create_access_token(str(user.id), user.email, user.role)
         refresh_token = create_refresh_token(str(user.id), user.email, user.role)
         return user, access_token, refresh_token
@@ -85,6 +88,8 @@ class AuthService:
                 ai_points=PLAN_POINTS[SubscriptionPlan.HACKER],
             )
             user = await self.users.create(user)
+            # Fire-and-forget welcome email for new Google users
+            EmailService.send_welcome_bg(user.email, user.name)
         else:
             updated = False
             if profile.get("picture") and not user.avatar_url:

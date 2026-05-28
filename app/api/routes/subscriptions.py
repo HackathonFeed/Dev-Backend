@@ -1,4 +1,5 @@
 """Subscription management endpoints."""
+from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from app.schemas.subscription_schema import (
     UpgradePlanRequest,
     VerifyPaymentRequest,
 )
+from app.services.email_service import EmailService
 from app.services.subscription_service import SubscriptionService
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
@@ -85,6 +87,28 @@ async def verify_payment(
     repo = get_user_repository(db)
     saved = await repo.update(updated_user)
     data = SubscriptionService.get_status(saved)
+
+    # Fire-and-forget plan confirmation email
+    # plan_expires_at comes back from Supabase as either a datetime or an ISO string —
+    # handle both to avoid AttributeError → 500
+    expires_str: str | None = None
+    if saved.plan_expires_at:
+        try:
+            raw = saved.plan_expires_at
+            if isinstance(raw, str):
+                raw = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            # Use %d (zero-padded) — cross-platform; strip leading zero manually
+            expires_str = raw.strftime("%d %B %Y").lstrip("0")
+        except Exception:  # noqa: BLE001
+            expires_str = str(saved.plan_expires_at)
+
+    EmailService.send_plan_upgrade_bg(
+        saved.email,
+        saved.name,
+        payload.plan,
+        expires_str,
+    )
+
     return APIResponse(
         success=True,
         message=f"Payment verified. Upgraded to {payload.plan} plan.",
