@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth_dependency import require_admin
 from app.core.database import get_db
 from app.schemas.response_schema import APIResponse
 from app.services.analytics_service import AnalyticsService
+from app.services.embedding_service import generate_missing_embeddings
 from app.services.hackathon_service import HackathonService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -34,6 +35,24 @@ async def trigger_scrape(
         success=True,
         message="Scrape trigger acknowledged. Connect this endpoint to the scraper scheduler.",
         data={"status": "queued"},
+    )
+
+
+@router.post("/generate-embeddings", response_model=APIResponse[dict])
+async def trigger_embedding_generation(
+    background_tasks: BackgroundTasks,
+    _: object = Depends(require_admin),
+):
+    """
+    Generate Titan Embed v2 embeddings for all projects that have none yet.
+    Runs in the background — returns immediately.
+    Call this after every scrape run to keep semantic search up to date.
+    """
+    background_tasks.add_task(generate_missing_embeddings)
+    return APIResponse(
+        success=True,
+        message="Embedding generation started in background. Only un-embedded projects are processed.",
+        data={"status": "running"},
     )
 
 

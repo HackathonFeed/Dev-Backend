@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.constants import UserRole
+from app.core.constants import PLAN_POINTS, SubscriptionPlan, UserRole
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -42,6 +42,8 @@ class AuthService:
             email=payload.email.lower(),
             password_hash=hash_password(payload.password),
             role=UserRole.USER,
+            subscription_plan=SubscriptionPlan.HACKER,
+            ai_points=PLAN_POINTS[SubscriptionPlan.HACKER],
         )
         user = await self.users.create(user)
         access_token = create_access_token(str(user.id), user.email, user.role)
@@ -79,6 +81,8 @@ class AuthService:
                 password_hash=hash_password(secrets.token_urlsafe(32)),
                 role=UserRole.USER,
                 avatar_url=avatar_url[:512] if avatar_url else None,
+                subscription_plan=SubscriptionPlan.HACKER,
+                ai_points=PLAN_POINTS[SubscriptionPlan.HACKER],
             )
             user = await self.users.create(user)
         else:

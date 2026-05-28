@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.core.constants import UserRole
+from app.core.constants import SubscriptionPlan, UserRole
 from app.utils.social_utils import (
     parse_github_username,
     parse_linkedin_username,
@@ -103,4 +103,7 @@ class UserResponse(BaseModel):
     linkedin_username: str | None = None
     twitter_username: str | None = None
     website: str | None = None
+    subscription_plan: SubscriptionPlan = SubscriptionPlan.HACKER
+    ai_points: int = 50
+    plan_expires_at: datetime | None = None
     created_at: datetime

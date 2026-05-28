@@ -41,3 +41,14 @@ class UserRepository:
         await self.session.flush()
         await self.session.refresh(user)
         return user
+
+    async def deduct_ai_points(self, user_id: uuid.UUID, cost: int) -> User:
+        user = await self.get_by_id(user_id)
+        if user is None:
+            raise RuntimeError("User not found for points deduction")
+        if user.ai_points == -1:
+            return user
+        user.ai_points = max(user.ai_points - cost, 0)
+        await self.session.flush()
+        await self.session.refresh(user)
+        return user

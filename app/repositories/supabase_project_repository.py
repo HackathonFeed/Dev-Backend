@@ -141,6 +141,36 @@ class SupabaseProjectRepository:
 
         return await asyncio.to_thread(_fetch)
 
+    # ── Semantic search ───────────────────────────────────────────────────────
+
+    async def semantic_search(
+        self,
+        embedding: list[float],
+        limit: int = 5,
+        technology: str | None = None,
+        is_winner: bool = False,
+    ) -> list[ProjectResponse]:
+        """
+        Cosine-similarity search using pgvector.
+        Calls the `match_projects` SQL function created by the migration.
+        """
+        def _fetch():
+            response = (
+                self.client.rpc(
+                    "match_projects",
+                    {
+                        "query_embedding": embedding,
+                        "match_count": limit,
+                        "filter_winner": is_winner,
+                        "filter_technology": technology,
+                    },
+                )
+                .execute()
+            )
+            return [_row_to_project(row) for row in (response.data or [])]
+
+        return await asyncio.to_thread(_fetch)
+
     # ── Facets ────────────────────────────────────────────────────────────────
 
     async def get_platform_stats(self) -> list[tuple[str, int]]:

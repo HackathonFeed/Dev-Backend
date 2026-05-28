@@ -15,6 +15,16 @@ anyio==4.13.0
     #   watchfiles
 asyncpg==0.31.0
     # via hackathonfeed-backend (pyproject.toml)
+boto3==1.35.99
+    # via hackathonfeed-backend (pyproject.toml)
+botocore==1.35.99
+    # via boto3
+jmespath==1.0.1
+    # via
+    #   boto3
+    #   botocore
+s3transfer==0.10.4
+    # via boto3
 bcrypt==4.3.0
     # via
     #   hackathonfeed-backend (pyproject.toml)

@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     google_client_id: str | None = None
 
+    # AWS Bedrock
+    # Option A — Long-term Bedrock API Key (recommended, created in Bedrock console)
+    bedrock_api_key: str | None = None
+    # Option B — IAM credentials (fallback if no API key)
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_region: str = "us-east-1"
+    bedrock_model_id: str = "amazon.nova-micro-v1:0"
+
+    # Razorpay
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+
     @property
     def effective_supabase_key(self) -> str | None:
         return self.supabase_service_key or self.supabase_key

@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from app.core.constants import UserRole
+from app.core.constants import SubscriptionPlan, UserRole
 from app.integrations.supabase_client import get_supabase_client
 from app.models.user_model import User
 
@@ -22,6 +22,11 @@ def _row_to_user(row: dict[str, Any]) -> User:
     user.linkedin_username = row.get("linkedin_username")
     user.twitter_username = row.get("twitter_username")
     user.website = row.get("website")
+    user.subscription_plan = SubscriptionPlan(
+        row.get("subscription_plan", SubscriptionPlan.HACKER.value)
+    )
+    user.ai_points = row.get("ai_points", 50)
+    user.plan_expires_at = row.get("plan_expires_at")
     user.created_at = row.get("created_at")
     user.updated_at = row.get("updated_at")
     return user
@@ -103,6 +108,8 @@ class SupabaseUserRepository:
                 "role": user.role.value,
                 "interests": user.interests or [],
                 "avatar_url": user.avatar_url,
+                "subscription_plan": user.subscription_plan.value,
+                "ai_points": user.ai_points,
             }
             response = self.client.table(self.TABLE).insert(payload).execute()
             if not response.data:
@@ -124,6 +131,11 @@ class SupabaseUserRepository:
                 "linkedin_username": user.linkedin_username,
                 "twitter_username": user.twitter_username,
                 "website": user.website,
+                "subscription_plan": user.subscription_plan.value,
+                "ai_points": user.ai_points,
+                "plan_expires_at": (
+                    user.plan_expires_at.isoformat() if user.plan_expires_at else None
+                ),
             }
             response = (
                 self.client.table(self.TABLE)
@@ -136,3 +148,36 @@ class SupabaseUserRepository:
             return _row_to_user(response.data[0])
 
         return await asyncio.to_thread(_update)
+
+    async def deduct_ai_points(self, user_id: uuid.UUID, cost: int) -> User:
+        """Atomically deduct points (no-op for unlimited plans). Returns updated user."""
+        def _deduct():
+            # Fetch current points first
+            row = (
+                self.client.table(self.TABLE)
+                .select("ai_points, subscription_plan")
+                .eq("id", str(user_id))
+                .limit(1)
+                .execute()
+            )
+            if not row.data:
+                raise RuntimeError("User not found for points deduction")
+            current = row.data[0]
+            if current["ai_points"] == -1:          # unlimited plan
+                return None
+            new_points = max(current["ai_points"] - cost, 0)
+            response = (
+                self.client.table(self.TABLE)
+                .update({"ai_points": new_points})
+                .eq("id", str(user_id))
+                .execute()
+            )
+            if not response.data:
+                raise RuntimeError("Supabase did not return updated user after points deduction")
+            return _row_to_user(response.data[0])
+
+        result = await asyncio.to_thread(_deduct)
+        # If unlimited, just re-fetch the full user
+        if result is None:
+            return await self.get_by_id(user_id)
+        return result

@@ -1,11 +1,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, String, Text, func
+from sqlalchemy import DateTime, Enum, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.constants import UserRole
+from app.core.constants import SubscriptionPlan, UserRole
 from app.core.database import Base
 
 
@@ -30,6 +30,17 @@ class User(Base):
     linkedin_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     twitter_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # ── Subscription / AI points ─────────────────────────────────────────────
+    subscription_plan: Mapped[SubscriptionPlan] = mapped_column(
+        Enum(SubscriptionPlan, name="subscription_plan", create_type=True),
+        default=SubscriptionPlan.HACKER,
+        nullable=False,
+    )
+    ai_points: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    plan_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ─────────────────────────────────────────────────────────────────────────
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
