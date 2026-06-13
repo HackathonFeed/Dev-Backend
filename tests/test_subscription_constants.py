@@ -71,11 +71,11 @@ class TestPlanCatalogue:
 
     def test_builder_plan_price_inr(self):
         builder = next(p for p in PLAN_CATALOGUE if p.key == SubscriptionPlan.BUILDER)
-        assert builder.price_inr == 1  # TEST price
+        assert builder.price_inr == 299
 
     def test_champion_plan_price_inr(self):
         champion = next(p for p in PLAN_CATALOGUE if p.key == SubscriptionPlan.CHAMPION)
-        assert champion.price_inr == 1  # TEST price
+        assert champion.price_inr == 499
 
     def test_hacker_points_match_constant(self):
         hacker = next(p for p in PLAN_CATALOGUE if p.key == SubscriptionPlan.HACKER)

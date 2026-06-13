@@ -12,16 +12,15 @@ from app.services.subscription_service import SubscriptionService
 
 class TestPlanFromAmountPaise:
     def test_builder_amount(self):
-        assert SubscriptionService.plan_from_amount_paise(100) == SubscriptionPlan.BUILDER
+        assert SubscriptionService.plan_from_amount_paise(29900) == SubscriptionPlan.BUILDER
 
     def test_champion_amount(self):
-        # Same ₹1 test price — amount alone maps to first paid plan (builder)
-        assert SubscriptionService.plan_from_amount_paise(100) == SubscriptionPlan.BUILDER
+        assert SubscriptionService.plan_from_amount_paise(49900) == SubscriptionPlan.CHAMPION
 
 
 class TestResolvePlanFromPayment:
     def test_notes_plan_wins_over_amount(self):
-        payment = {"amount": 100, "notes": {"plan": "champion"}}
+        payment = {"amount": 49900, "notes": {"plan": "champion"}}
         assert SubscriptionService._resolve_plan_from_payment(payment) == SubscriptionPlan.CHAMPION
 
     def test_unknown_amount_returns_none(self):

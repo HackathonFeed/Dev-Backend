@@ -60,7 +60,11 @@ class Settings(BaseSettings):
     razorpay_payment_page_champion_url: str | None = None
     frontend_url: str | None = None
 
-    # SMTP (Gmail)
+    # Email — use Resend HTTP API on Vercel (SMTP is blocked/unreliable on serverless)
+    resend_api_key: str | None = None
+    resend_from: str | None = None  # e.g. "HackathonFeed <noreply@hackathonfeed.com>"
+
+    # SMTP (Gmail) — works locally; blocked on Vercel serverless
     smtp_email: str | None = None
     smtp_password: str | None = None   # Gmail App Password
     smtp_from_name: str = "HackathonFeed"
@@ -68,6 +72,14 @@ class Settings(BaseSettings):
     @property
     def effective_supabase_key(self) -> str | None:
         return self.supabase_service_key or self.supabase_key
+
+    @property
+    def effective_email_from(self) -> str | None:
+        if self.resend_from and self.resend_from.strip():
+            return self.resend_from.strip()
+        if self.smtp_email and self.smtp_email.strip():
+            return f"{self.smtp_from_name} <{self.smtp_email.strip()}>"
+        return None
 
     @property
     def database_configured(self) -> bool:

@@ -10,6 +10,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import httpx
 from loguru import logger
 
 from app.core.config import get_settings
@@ -18,6 +19,35 @@ from app.schemas.subscription_schema import PLAN_CATALOGUE
 
 
 # ── Low-level send ────────────────────────────────────────────────────────────
+
+async def _send_via_resend(to_email: str, subject: str, html_body: str) -> None:
+    """Send over HTTPS — works on Vercel (SMTP ports are blocked/unreliable)."""
+    settings = get_settings()
+    api_key = (settings.resend_api_key or "").strip()
+    from_addr = settings.effective_email_from
+    if not api_key:
+        raise RuntimeError("RESEND_API_KEY is not configured")
+    if not from_addr:
+        raise RuntimeError("RESEND_FROM or SMTP_EMAIL is not configured")
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body,
+            },
+        )
+
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"Resend API {resp.status_code}: {resp.text[:400]}")
+
 
 def _send_sync(to_email: str, subject: str, html_body: str) -> None:
     """Blocking send — must be called inside asyncio.to_thread."""
@@ -43,8 +73,14 @@ def _send_sync(to_email: str, subject: str, html_body: str) -> None:
 
 
 async def _send_async(to_email: str, subject: str, html_body: str) -> None:
-    """Fire-and-forget async wrapper.  Errors are logged, not raised."""
+    """Deliver email via Resend (production) or Gmail SMTP (local fallback)."""
+    settings = get_settings()
     try:
+        if (settings.resend_api_key or "").strip():
+            await _send_via_resend(to_email, subject, html_body)
+            logger.info("Email sent (Resend) → {} | {}", to_email, subject)
+            return
+
         await asyncio.to_thread(_send_sync, to_email, subject, html_body)
     except Exception as exc:  # noqa: BLE001
         logger.error("Email send failed → {} | {}: {}", to_email, subject, exc)
