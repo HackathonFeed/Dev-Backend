@@ -3,18 +3,25 @@ import base64
 import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import httpx
 from fastapi import HTTPException, status
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.constants import AI_MESSAGE_COST, PLAN_POINTS, SubscriptionPlan
 from app.models.user_model import User
+from app.repositories.factory import get_user_repository
 from app.schemas.subscription_schema import (
     PLAN_CATALOGUE,
     CreateOrderResponse,
+    PaymentPageResponse,
     PlanInfo,
     SubscriptionStatusResponse,
+    build_payment_page_url,
+    get_plan_catalogue,
 )
 
 
@@ -23,7 +30,42 @@ class SubscriptionService:
 
     @staticmethod
     def list_plans() -> list[PlanInfo]:
-        return PLAN_CATALOGUE
+        return get_plan_catalogue()
+
+    @staticmethod
+    def get_payment_page(plan: SubscriptionPlan, email: str) -> PaymentPageResponse:
+        """Return the Razorpay Payment Page URL for a paid plan."""
+        if plan == SubscriptionPlan.HACKER:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The Hacker plan is free — no payment required.",
+            )
+
+        plan_info = next((p for p in get_plan_catalogue() if p.key == plan), None)
+        if not plan_info or not plan_info.payment_page_url:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Payment page is not configured for this plan.",
+            )
+
+        return PaymentPageResponse(
+            plan=plan,
+            plan_name=plan_info.name,
+            price_inr=plan_info.price_inr,
+            payment_page_url=build_payment_page_url(plan_info.payment_page_url, email),
+            checkout_note=(
+                "Pay on Razorpay using the same email as your HackathonFeed account. "
+                "Your plan upgrades automatically within a minute after payment."
+            ),
+        )
+
+    @staticmethod
+    def plan_from_amount_paise(amount_paise: int) -> SubscriptionPlan | None:
+        """Map captured payment amount (paise) to a subscription plan."""
+        for plan_info in PLAN_CATALOGUE:
+            if plan_info.price_inr > 0 and plan_info.price_inr * 100 == amount_paise:
+                return plan_info.key
+        return None
 
     @staticmethod
     def get_status(user: User) -> SubscriptionStatusResponse:
@@ -168,3 +210,69 @@ class SubscriptionService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Payment signature verification failed. Please contact support.",
             )
+
+    # ── Razorpay Payment Pages: webhook ───────────────────────────────────────
+
+    @staticmethod
+    def verify_razorpay_webhook_signature(body: bytes, signature: str) -> None:
+        """Raise 400 if the Razorpay webhook signature is invalid."""
+        settings = get_settings()
+        secret = (settings.razorpay_webhook_secret or "").strip()
+        if not secret:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Razorpay webhook secret is not configured.",
+            )
+
+        expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid webhook signature.",
+            )
+
+    @staticmethod
+    async def handle_payment_page_webhook(payload: dict[str, Any], db: AsyncSession) -> None:
+        """Upgrade a user when Razorpay sends payment.captured from a Payment Page."""
+        from app.services.email_service import EmailService
+
+        event = payload.get("event")
+        if event != "payment.captured":
+            logger.info(f"Ignoring Razorpay webhook event: {event}")
+            return
+
+        payment = payload.get("payload", {}).get("payment", {}).get("entity", {})
+        payment_id = payment.get("id")
+        email = (payment.get("email") or "").strip().lower()
+        amount_paise = payment.get("amount")
+
+        if not payment_id or not email or amount_paise is None:
+            logger.warning(f"Incomplete Razorpay webhook payload: payment_id={payment_id!r} email={email!r}")
+            return
+
+        plan = SubscriptionService.plan_from_amount_paise(int(amount_paise))
+        if plan is None:
+            logger.warning(f"Unmapped Razorpay payment amount: {amount_paise} paise (payment {payment_id})")
+            return
+
+        repo = get_user_repository(db)
+        user = await repo.get_by_email(email)
+        if user is None:
+            logger.warning(f"No HackathonFeed user for Razorpay payment email: {email} (payment {payment_id})")
+            return
+
+        updated_user = SubscriptionService.apply_upgrade(user, plan)
+        saved = await repo.update(updated_user)
+        logger.info(f"Upgraded {email} to {plan} via Payment Page (payment {payment_id})")
+
+        expires_str: str | None = None
+        if saved.plan_expires_at:
+            try:
+                raw = saved.plan_expires_at
+                if isinstance(raw, str):
+                    raw = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                expires_str = raw.strftime("%d %B %Y").lstrip("0")
+            except Exception:  # noqa: BLE001
+                expires_str = str(saved.plan_expires_at)
+
+        EmailService.send_plan_upgrade_bg(saved.email, saved.name, plan, expires_str)

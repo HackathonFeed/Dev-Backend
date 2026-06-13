@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import urlencode
 
 from pydantic import BaseModel
 
@@ -13,6 +14,7 @@ class PlanInfo(BaseModel):
     points: int               # −1 = unlimited
     messages_per_cycle: str   # human-readable
     features: list[str]
+    payment_page_url: str | None = None
 
 
 class SubscriptionStatusResponse(BaseModel):
@@ -47,6 +49,14 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_payment_id: str
     razorpay_signature: str
     plan: SubscriptionPlan
+
+
+class PaymentPageResponse(BaseModel):
+    plan: SubscriptionPlan
+    plan_name: str
+    price_inr: int
+    payment_page_url: str
+    checkout_note: str
 
 
 # ── Static plan catalogue ─────────────────────────────────────────────────────
@@ -97,3 +107,28 @@ PLAN_CATALOGUE: list[PlanInfo] = [
         ],
     ),
 ]
+
+
+def get_plan_catalogue() -> list[PlanInfo]:
+    """Return plans with Razorpay Payment Page URLs when configured."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    page_urls = {
+        SubscriptionPlan.BUILDER: settings.razorpay_payment_page_builder_url,
+        SubscriptionPlan.CHAMPION: settings.razorpay_payment_page_champion_url,
+    }
+    enriched: list[PlanInfo] = []
+    for plan in PLAN_CATALOGUE:
+        page_url = page_urls.get(plan.key)
+        enriched.append(plan.model_copy(update={"payment_page_url": page_url}) if page_url else plan)
+    return enriched
+
+
+def build_payment_page_url(base_url: str, email: str | None = None) -> str:
+    """Append Razorpay prefill params when possible."""
+    if not email:
+        return base_url
+    separator = "&" if "?" in base_url else "?"
+    params = urlencode({"prefill[email]": email, "prefill[contact]": ""})
+    return f"{base_url}{separator}{params}"

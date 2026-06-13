@@ -52,9 +52,12 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     bedrock_model_id: str = "amazon.nova-micro-v1:0"
 
-    # Razorpay
+    # Razorpay (Payment Pages — hosted checkout, no website API approval needed)
     razorpay_key_id: str | None = None
     razorpay_key_secret: str | None = None
+    razorpay_webhook_secret: str | None = None
+    razorpay_payment_page_builder_url: str | None = None
+    razorpay_payment_page_champion_url: str | None = None
 
     # SMTP (Gmail)
     smtp_email: str | None = None

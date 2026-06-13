@@ -1,21 +1,23 @@
 """Subscription management endpoints."""
+import json
 from datetime import datetime
-from fastapi import APIRouter, Depends
+
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.auth_dependency import get_current_user
-from app.core.constants import PROJECT_VIEW_COST
+from app.core.constants import PROJECT_VIEW_COST, SubscriptionPlan
 from app.core.database import get_db
 from app.repositories.factory import get_user_repository
 from app.schemas.response_schema import APIResponse
 from app.schemas.subscription_schema import (
-    PLAN_CATALOGUE,
     CreateOrderRequest,
     CreateOrderResponse,
+    PaymentPageResponse,
     PlanInfo,
     SubscriptionStatusResponse,
-    UpgradePlanRequest,
     VerifyPaymentRequest,
+    get_plan_catalogue,
 )
 from app.services.email_service import EmailService
 from app.services.subscription_service import SubscriptionService
@@ -25,8 +27,8 @@ router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
 @router.get("/plans", response_model=APIResponse[list[PlanInfo]])
 async def list_plans():
-    """Return all available subscription plans."""
-    return APIResponse(success=True, message="Plans fetched", data=PLAN_CATALOGUE)
+    """Return all available subscription plans (includes Payment Page URLs when configured)."""
+    return APIResponse(success=True, message="Plans fetched", data=get_plan_catalogue())
 
 
 @router.get("/me", response_model=APIResponse[SubscriptionStatusResponse])
@@ -37,6 +39,35 @@ async def my_subscription(
     """Return the authenticated user's current plan and remaining AI points."""
     data = SubscriptionService.get_status(current_user)
     return APIResponse(success=True, message="Subscription status fetched", data=data)
+
+
+@router.get("/payment-page/{plan}", response_model=APIResponse[PaymentPageResponse])
+async def get_payment_page(
+    plan: SubscriptionPlan,
+    current_user=Depends(get_current_user),
+):
+    """
+    Return the Razorpay Payment Page URL for a paid plan.
+    User pays on Razorpay's hosted page; upgrade is applied via webhook.
+    """
+    data = SubscriptionService.get_payment_page(plan, current_user.email)
+    return APIResponse(success=True, message="Payment page URL fetched", data=data)
+
+
+@router.post("/razorpay-webhook")
+async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Razorpay webhook for Payment Page payments.
+    Configure in Dashboard → Account & Settings → Webhooks.
+    Subscribe to: payment.captured
+    """
+    body = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature", "")
+    SubscriptionService.verify_razorpay_webhook_signature(body, signature)
+
+    payload = json.loads(body)
+    await SubscriptionService.handle_payment_page_webhook(payload, db)
+    return {"status": "ok"}
 
 
 @router.post("/consume-project-view", response_model=APIResponse[SubscriptionStatusResponse])
@@ -58,8 +89,8 @@ async def create_order(
     current_user=Depends(get_current_user),
 ):
     """
-    Create a Razorpay payment order for a paid plan.
-    Returns the order_id and publishable key needed to open Razorpay Checkout on the frontend.
+    [Legacy] Create a Razorpay payment order for embedded Checkout.
+    Prefer GET /payment-page/{plan} when using Razorpay Payment Pages.
     """
     data = await SubscriptionService.create_razorpay_order(payload.plan, str(current_user.id))
     return APIResponse(success=True, message="Order created", data=data)
@@ -72,32 +103,26 @@ async def verify_payment(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Verify Razorpay payment signature (HMAC-SHA256) and upgrade the user's plan.
-    Called by the frontend after Razorpay Checkout succeeds.
+    [Legacy] Verify Razorpay Checkout payment signature and upgrade the user's plan.
+    Not used with Payment Pages — upgrades happen via /razorpay-webhook.
     """
-    # Verify signature — raises 400 if invalid
     SubscriptionService.verify_razorpay_signature(
         payload.razorpay_order_id,
         payload.razorpay_payment_id,
         payload.razorpay_signature,
     )
 
-    # Signature valid → apply upgrade
     updated_user = SubscriptionService.apply_upgrade(current_user, payload.plan)
     repo = get_user_repository(db)
     saved = await repo.update(updated_user)
     data = SubscriptionService.get_status(saved)
 
-    # Fire-and-forget plan confirmation email
-    # plan_expires_at comes back from Supabase as either a datetime or an ISO string —
-    # handle both to avoid AttributeError → 500
     expires_str: str | None = None
     if saved.plan_expires_at:
         try:
             raw = saved.plan_expires_at
             if isinstance(raw, str):
                 raw = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            # Use %d (zero-padded) — cross-platform; strip leading zero manually
             expires_str = raw.strftime("%d %B %Y").lstrip("0")
         except Exception:  # noqa: BLE001
             expires_str = str(saved.plan_expires_at)
