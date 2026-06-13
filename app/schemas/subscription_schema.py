@@ -82,7 +82,7 @@ PLAN_CATALOGUE: list[PlanInfo] = [
         key=SubscriptionPlan.BUILDER,
         name="Builder",
         price_usd=2.4,
-        price_inr=199,
+        price_inr=1,  # TEST: was 199 — restore before production
         points=PLAN_POINTS[SubscriptionPlan.BUILDER],
         messages_per_cycle="40 AI messages total",
         features=[
@@ -97,7 +97,7 @@ PLAN_CATALOGUE: list[PlanInfo] = [
         key=SubscriptionPlan.CHAMPION,
         name="Champion",
         price_usd=5.99,
-        price_inr=499,
+        price_inr=1,  # TEST: was 499 — restore before production
         points=PLAN_POINTS[SubscriptionPlan.CHAMPION],
         messages_per_cycle="Unlimited AI messages — forever",
         features=[
@@ -131,6 +131,7 @@ def build_payment_page_url(
     base_url: str,
     email: str | None = None,
     user_id: str | None = None,
+    plan: str | None = None,
 ) -> str:
     """Append Razorpay prefill + notes so webhook/claim can match the payer."""
     query: dict[str, str] = {}
@@ -140,6 +141,8 @@ def build_payment_page_url(
         query["notes[email]"] = email.lower()
     if user_id:
         query["notes[user_id]"] = user_id
+    if plan:
+        query["notes[plan]"] = plan
 
     if not query:
         return base_url

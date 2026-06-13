@@ -67,6 +67,7 @@ class SubscriptionService:
                 plan_info.payment_page_url,
                 email,
                 user_id,
+                plan.value,
             ),
             checkout_note=(
                 "Pay on Razorpay using the same email as your HackathonFeed account. "
@@ -78,10 +79,31 @@ class SubscriptionService:
     @staticmethod
     def plan_from_amount_paise(amount_paise: int) -> SubscriptionPlan | None:
         """Map captured payment amount (paise) to a subscription plan."""
-        for plan_info in PLAN_CATALOGUE:
-            if plan_info.price_inr > 0 and plan_info.price_inr * 100 == amount_paise:
-                return plan_info.key
-        return None
+        matches = [
+            plan_info.key
+            for plan_info in PLAN_CATALOGUE
+            if plan_info.price_inr > 0 and plan_info.price_inr * 100 == amount_paise
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        return matches[0] if matches else None
+
+    @staticmethod
+    def _resolve_plan_from_payment(payment: dict[str, Any]) -> SubscriptionPlan | None:
+        """Prefer plan in Razorpay notes (needed when test prices collide at ₹1)."""
+        notes = payment.get("notes") or {}
+        if isinstance(notes, dict):
+            raw = notes.get("plan") or notes.get("subscription_plan")
+            if raw:
+                try:
+                    return SubscriptionPlan(str(raw).lower())
+                except ValueError:
+                    logger.warning(f"Unknown plan in Razorpay notes: {raw!r}")
+
+        amount_paise = payment.get("amount")
+        if amount_paise is None:
+            return None
+        return SubscriptionService.plan_from_amount_paise(int(amount_paise))
 
     @staticmethod
     def _extract_payment_email(payment: dict[str, Any]) -> str:
@@ -168,11 +190,22 @@ class SubscriptionService:
         return f"Basic {credentials}"
 
     @staticmethod
+    def _payment_matches_plan(payment: dict[str, Any], plan: SubscriptionPlan) -> bool:
+        notes = payment.get("notes") or {}
+        if isinstance(notes, dict):
+            note_plan = notes.get("plan") or notes.get("subscription_plan")
+            if note_plan:
+                return str(note_plan).lower() == plan.value
+        resolved = SubscriptionService._resolve_plan_from_payment(payment)
+        return resolved == plan
+
+    @staticmethod
     async def _find_recent_captured_payment(
         email: str,
         amount_paise: int,
         *,
         user_id: str | None = None,
+        plan: SubscriptionPlan | None = None,
     ) -> dict[str, Any] | None:
         """Look up a recent captured Razorpay payment for email + amount."""
         since = int(time.time()) - 6 * 3600
@@ -196,6 +229,8 @@ class SubscriptionService:
                 continue
             if int(payment.get("amount", 0)) != amount_paise:
                 continue
+            if plan is not None and not SubscriptionService._payment_matches_plan(payment, plan):
+                continue
 
             note_user_id = SubscriptionService._extract_payment_user_id(payment)
             if user_id and note_user_id == user_id:
@@ -205,7 +240,7 @@ class SubscriptionService:
             if payment_email and payment_email == target_email:
                 return payment
 
-            if fallback is None and not payment_email and user_id:
+            if fallback is None and user_id:
                 fallback = payment
 
         return fallback
@@ -290,6 +325,7 @@ class SubscriptionService:
                     user.email,
                     amount_paise,
                     user_id=str(user.id),
+                    plan=plan,
                 )
             except HTTPException as exc:
                 if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
@@ -498,11 +534,11 @@ class SubscriptionService:
             )
             return
 
-        plan = SubscriptionService.plan_from_amount_paise(int(amount_paise))
+        plan = SubscriptionService._resolve_plan_from_payment(payment)
         if plan is None:
             logger.warning(
-                f"Unmapped Razorpay payment amount: {amount_paise} paise "
-                f"(payment {payment_id}, email {email})"
+                f"Unmapped Razorpay payment: amount={amount_paise} paise "
+                f"(payment {payment_id}, email {email}, notes {payment.get('notes')!r})"
             )
             return
 

@@ -12,10 +12,17 @@ from app.services.subscription_service import SubscriptionService
 
 class TestPlanFromAmountPaise:
     def test_builder_amount(self):
-        assert SubscriptionService.plan_from_amount_paise(19900) == SubscriptionPlan.BUILDER
+        assert SubscriptionService.plan_from_amount_paise(100) == SubscriptionPlan.BUILDER
 
     def test_champion_amount(self):
-        assert SubscriptionService.plan_from_amount_paise(49900) == SubscriptionPlan.CHAMPION
+        # Same ₹1 test price — amount alone maps to first paid plan (builder)
+        assert SubscriptionService.plan_from_amount_paise(100) == SubscriptionPlan.BUILDER
+
+
+class TestResolvePlanFromPayment:
+    def test_notes_plan_wins_over_amount(self):
+        payment = {"amount": 100, "notes": {"plan": "champion"}}
+        assert SubscriptionService._resolve_plan_from_payment(payment) == SubscriptionPlan.CHAMPION
 
     def test_unknown_amount_returns_none(self):
         assert SubscriptionService.plan_from_amount_paise(999) is None
@@ -33,8 +40,10 @@ class TestBuildPaymentPageUrl:
             "https://rzp.io/i/abc123",
             "user@hackathonfeed.com",
             "550e8400-e29b-41d4-a716-446655440000",
+            "builder",
         )
         assert "notes%5Buser_id%5D=550e8400-e29b-41d4-a716-446655440000" in url
+        assert "notes%5Bplan%5D=builder" in url
 
     def test_preserves_existing_query_string(self):
         url = build_payment_page_url("https://rzp.io/i/abc123?foo=1", "user@test.com")
