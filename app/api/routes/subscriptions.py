@@ -51,7 +51,7 @@ async def get_payment_page(
     Return the Razorpay Payment Page URL for a paid plan.
     User pays on Razorpay's hosted page; upgrade is applied via webhook.
     """
-    data = SubscriptionService.get_payment_page(plan, current_user.email)
+    data = SubscriptionService.get_payment_page(plan, current_user.email, str(current_user.id))
     return APIResponse(success=True, message="Payment page URL fetched", data=data)
 
 
@@ -81,7 +81,12 @@ async def claim_upgrade(
     Verify a recent Razorpay payment for the logged-in user and apply the plan upgrade.
     Called by the frontend after Payment Page checkout (fallback if webhook is delayed).
     """
-    data = await SubscriptionService.claim_plan_upgrade(current_user, payload.plan, db)
+    data = await SubscriptionService.claim_plan_upgrade(
+        current_user,
+        payload.plan,
+        db,
+        payment_id=payload.payment_id,
+    )
     return APIResponse(
         success=True,
         message=f"Upgraded to {payload.plan} plan.",

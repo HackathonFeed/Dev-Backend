@@ -27,6 +27,7 @@ class SubscriptionStatusResponse(BaseModel):
 
 class UpgradePlanRequest(BaseModel):
     plan: SubscriptionPlan
+    payment_id: str | None = None
 
 
 # ── Razorpay payment schemas ──────────────────────────────────────────────────
@@ -57,6 +58,7 @@ class PaymentPageResponse(BaseModel):
     price_inr: int
     payment_page_url: str
     checkout_note: str
+    success_redirect_url: str | None = None
 
 
 # ── Static plan catalogue ─────────────────────────────────────────────────────
@@ -125,10 +127,28 @@ def get_plan_catalogue() -> list[PlanInfo]:
     return enriched
 
 
-def build_payment_page_url(base_url: str, email: str | None = None) -> str:
-    """Append Razorpay prefill params when possible."""
-    if not email:
+def build_payment_page_url(
+    base_url: str,
+    email: str | None = None,
+    user_id: str | None = None,
+) -> str:
+    """Append Razorpay prefill + notes so webhook/claim can match the payer."""
+    query: dict[str, str] = {}
+    if email:
+        query["prefill[email]"] = email
+        query["prefill[contact]"] = ""
+        query["notes[email]"] = email.lower()
+    if user_id:
+        query["notes[user_id]"] = user_id
+
+    if not query:
         return base_url
     separator = "&" if "?" in base_url else "?"
-    params = urlencode({"prefill[email]": email, "prefill[contact]": ""})
-    return f"{base_url}{separator}{params}"
+    return f"{base_url}{separator}{urlencode(query)}"
+
+
+def build_billing_success_url(frontend_base: str | None, plan: SubscriptionPlan) -> str | None:
+    base = (frontend_base or "").strip().rstrip("/")
+    if not base:
+        return None
+    return f"{base}/billing/success?plan={plan.value}"

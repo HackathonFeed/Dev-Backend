@@ -25,7 +25,16 @@ class TestBuildPaymentPageUrl:
     def test_appends_prefill_email(self):
         url = build_payment_page_url("https://rzp.io/i/abc123", "user@hackathonfeed.com")
         assert "prefill%5Bemail%5D=user%40hackathonfeed.com" in url
+        assert "notes%5Bemail%5D=user%40hackathonfeed.com" in url
         assert url.startswith("https://rzp.io/i/abc123?")
+
+    def test_appends_user_id_note(self):
+        url = build_payment_page_url(
+            "https://rzp.io/i/abc123",
+            "user@hackathonfeed.com",
+            "550e8400-e29b-41d4-a716-446655440000",
+        )
+        assert "notes%5Buser_id%5D=550e8400-e29b-41d4-a716-446655440000" in url
 
     def test_preserves_existing_query_string(self):
         url = build_payment_page_url("https://rzp.io/i/abc123?foo=1", "user@test.com")

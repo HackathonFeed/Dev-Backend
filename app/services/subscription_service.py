@@ -21,6 +21,7 @@ from app.schemas.subscription_schema import (
     PaymentPageResponse,
     PlanInfo,
     SubscriptionStatusResponse,
+    build_billing_success_url,
     build_payment_page_url,
     get_plan_catalogue,
 )
@@ -40,7 +41,7 @@ class SubscriptionService:
         return get_plan_catalogue()
 
     @staticmethod
-    def get_payment_page(plan: SubscriptionPlan, email: str) -> PaymentPageResponse:
+    def get_payment_page(plan: SubscriptionPlan, email: str, user_id: str) -> PaymentPageResponse:
         """Return the Razorpay Payment Page URL for a paid plan."""
         if plan == SubscriptionPlan.HACKER:
             raise HTTPException(
@@ -55,15 +56,23 @@ class SubscriptionService:
                 detail="Payment page is not configured for this plan.",
             )
 
+        settings = get_settings()
+        success_url = build_billing_success_url(settings.frontend_url, plan)
+
         return PaymentPageResponse(
             plan=plan,
             plan_name=plan_info.name,
             price_inr=plan_info.price_inr,
-            payment_page_url=build_payment_page_url(plan_info.payment_page_url, email),
+            payment_page_url=build_payment_page_url(
+                plan_info.payment_page_url,
+                email,
+                user_id,
+            ),
             checkout_note=(
                 "Pay on Razorpay using the same email as your HackathonFeed account. "
-                "Your plan upgrades automatically within a minute after payment."
+                "Your plan upgrades automatically after payment."
             ),
+            success_redirect_url=success_url,
         )
 
     @staticmethod
@@ -84,6 +93,69 @@ class SubscriptionService:
         return str(raw).strip().lower()
 
     @staticmethod
+    def _extract_payment_user_id(payment: dict[str, Any]) -> str | None:
+        notes = payment.get("notes") or {}
+        if not isinstance(notes, dict):
+            return None
+        raw = notes.get("user_id") or notes.get("hackathonfeed_user_id")
+        if not raw:
+            return None
+        return str(raw).strip()
+
+    @staticmethod
+    async def _fetch_razorpay_payment(payment_id: str) -> dict[str, Any] | None:
+        auth = SubscriptionService._razorpay_auth_header()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"https://api.razorpay.com/v1/payments/{payment_id}",
+                headers={"Authorization": auth},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                f"Razorpay payment fetch failed for {payment_id}: "
+                f"{resp.status_code} {resp.text[:200]}"
+            )
+            return None
+        return resp.json()
+
+    @staticmethod
+    async def _resolve_user_for_payment(
+        payment: dict[str, Any],
+        db: AsyncSession,
+        *,
+        expected_user: User | None = None,
+    ) -> User | None:
+        repo = get_user_repository(db)
+
+        note_user_id = SubscriptionService._extract_payment_user_id(payment)
+        if note_user_id:
+            try:
+                import uuid
+
+                user = await repo.get_by_id(uuid.UUID(note_user_id))
+                if user is not None:
+                    return user
+            except ValueError:
+                logger.warning(f"Invalid user_id in Razorpay notes: {note_user_id!r}")
+
+        email = SubscriptionService._extract_payment_email(payment)
+        if email:
+            user = await repo.get_by_email(email)
+            if user is not None:
+                return user
+
+        if expected_user is not None:
+            payment_email = SubscriptionService._extract_payment_email(payment)
+            if not payment_email:
+                logger.info(
+                    f"Claiming payment {payment.get('id')} for {expected_user.email} "
+                    "(no email on payment; trusted logged-in claim)"
+                )
+                return expected_user
+
+        return None
+
+    @staticmethod
     def _razorpay_auth_header() -> str:
         settings = get_settings()
         if not settings.razorpay_key_id or not settings.razorpay_key_secret:
@@ -96,13 +168,15 @@ class SubscriptionService:
         return f"Basic {credentials}"
 
     @staticmethod
-    async def _find_recent_captured_payment(email: str, amount_paise: int) -> dict[str, Any] | None:
+    async def _find_recent_captured_payment(
+        email: str,
+        amount_paise: int,
+        *,
+        user_id: str | None = None,
+    ) -> dict[str, Any] | None:
         """Look up a recent captured Razorpay payment for email + amount."""
         since = int(time.time()) - 6 * 3600
-        try:
-            auth = SubscriptionService._razorpay_auth_header()
-        except HTTPException:
-            return None
+        auth = SubscriptionService._razorpay_auth_header()
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
@@ -116,14 +190,25 @@ class SubscriptionService:
             return None
 
         target_email = email.strip().lower()
+        fallback: dict[str, Any] | None = None
         for payment in resp.json().get("items", []):
             if payment.get("status") != "captured":
                 continue
             if int(payment.get("amount", 0)) != amount_paise:
                 continue
-            if SubscriptionService._extract_payment_email(payment) == target_email:
+
+            note_user_id = SubscriptionService._extract_payment_user_id(payment)
+            if user_id and note_user_id == user_id:
                 return payment
-        return None
+
+            payment_email = SubscriptionService._extract_payment_email(payment)
+            if payment_email and payment_email == target_email:
+                return payment
+
+            if fallback is None and not payment_email and user_id:
+                fallback = payment
+
+        return fallback
 
     @staticmethod
     async def _persist_plan_upgrade(
@@ -155,6 +240,8 @@ class SubscriptionService:
         user: User,
         plan: SubscriptionPlan,
         db: AsyncSession,
+        *,
+        payment_id: str | None = None,
     ) -> SubscriptionStatusResponse:
         """
         After Payment Page checkout, verify a captured Razorpay payment for this
@@ -168,15 +255,55 @@ class SubscriptionService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid plan.")
 
         amount_paise = plan_info.price_inr * 100
-        payment = await SubscriptionService._find_recent_captured_payment(user.email, amount_paise)
-        if payment is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=(
-                    "No matching payment found yet. Pay on Razorpay using the same "
-                    f"email as your account ({user.email}), then try again."
-                ),
+        payment: dict[str, Any] | None = None
+
+        if payment_id:
+            payment = await SubscriptionService._fetch_razorpay_payment(payment_id.strip())
+            if payment is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Payment not found on Razorpay yet. Wait a few seconds and refresh.",
+                )
+            if payment.get("status") != "captured":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Payment is not completed yet. Finish checkout on Razorpay first.",
+                )
+            if int(payment.get("amount", 0)) != amount_paise:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Payment amount does not match the selected plan.",
+                )
+            owner = await SubscriptionService._resolve_user_for_payment(
+                payment,
+                db,
+                expected_user=user,
             )
+            if owner is None or str(owner.id) != str(user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This payment does not belong to your HackathonFeed account.",
+                )
+        else:
+            try:
+                payment = await SubscriptionService._find_recent_captured_payment(
+                    user.email,
+                    amount_paise,
+                    user_id=str(user.id),
+                )
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
+                    raise
+                payment = None
+
+            if payment is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=(
+                        "No matching payment found yet. Pay on Razorpay using the same "
+                        f"email as your account ({user.email}), then try again."
+                    ),
+                )
 
         saved = await SubscriptionService._persist_plan_upgrade(user, plan, db)
         await SubscriptionService._notify_plan_upgrade(saved, plan)
@@ -363,7 +490,7 @@ class SubscriptionService:
         email = SubscriptionService._extract_payment_email(payment)
         amount_paise = payment.get("amount")
 
-        if not payment_id or not email or amount_paise is None:
+        if not payment_id or amount_paise is None:
             logger.warning(
                 "Incomplete Razorpay webhook payload: "
                 f"payment_id={payment_id!r} email={email!r} amount={amount_paise!r} "
@@ -380,11 +507,11 @@ class SubscriptionService:
             return
 
         repo = get_user_repository(db)
-        user = await repo.get_by_email(email)
+        user = await SubscriptionService._resolve_user_for_payment(payment, db)
         if user is None:
             logger.warning(
-                f"No HackathonFeed user for Razorpay payment email: {email} "
-                f"(payment {payment_id})"
+                f"No HackathonFeed user for Razorpay payment "
+                f"(payment {payment_id}, email {email!r}, notes {payment.get('notes')!r})"
             )
             return
 

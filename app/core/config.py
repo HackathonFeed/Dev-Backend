@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     razorpay_webhook_secret: str | None = None
     razorpay_payment_page_builder_url: str | None = None
     razorpay_payment_page_champion_url: str | None = None
+    frontend_url: str | None = None
 
     # SMTP (Gmail)
     smtp_email: str | None = None
