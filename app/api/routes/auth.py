@@ -129,7 +129,7 @@ async def forgot_password(
     user = await repo.get_by_email(str(payload.email))
     if user:
         code = prs.generate_and_store_code(str(payload.email))
-        EmailService.send_reset_code_bg(user.email, user.name, code)
+        await EmailService.send_reset_code(user.email, user.name, code)
     # Always return success so attackers can't enumerate registered emails
     return APIResponse(success=True, message="If that email is registered, a reset code has been sent.", data=None)
 

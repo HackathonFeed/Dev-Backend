@@ -22,20 +22,22 @@ from app.schemas.subscription_schema import PLAN_CATALOGUE
 def _send_sync(to_email: str, subject: str, html_body: str) -> None:
     """Blocking send — must be called inside asyncio.to_thread."""
     settings = get_settings()
-    if not settings.smtp_email or not settings.smtp_password:
+    smtp_email = (settings.smtp_email or "").strip()
+    smtp_password = (settings.smtp_password or "").strip().replace(" ", "")
+    if not smtp_email or not smtp_password:
         logger.warning("SMTP not configured — skipping email to {}", to_email)
         return
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"{settings.smtp_from_name} <{settings.smtp_email}>"
+    msg["From"] = f"{settings.smtp_from_name} <{smtp_email}>"
     msg["To"] = to_email
-    msg["Reply-To"] = settings.smtp_email
+    msg["Reply-To"] = smtp_email
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
-        smtp.login(settings.smtp_email, settings.smtp_password)
-        smtp.sendmail(settings.smtp_email, [to_email], msg.as_string())
+        smtp.login(smtp_email, smtp_password)
+        smtp.sendmail(smtp_email, [to_email], msg.as_string())
 
     logger.info("Email sent → {} | {}", to_email, subject)
 
@@ -52,18 +54,39 @@ async def _send_async(to_email: str, subject: str, html_body: str) -> None:
 
 class EmailService:
     @staticmethod
-    def send_welcome_bg(to_email: str, name: str) -> None:
-        """Schedule a welcome email as a background task (fire-and-forget)."""
+    async def send_welcome(to_email: str, name: str) -> None:
         html = _build_welcome_email(name)
         subject = f"Welcome to HackathonFeed, {name.split()[0]}! 🚀"
-        asyncio.create_task(_send_async(to_email, subject, html))
+        await _send_async(to_email, subject, html)
+
+    @staticmethod
+    def send_welcome_bg(to_email: str, name: str) -> None:
+        """Schedule a welcome email. Prefer await send_welcome() in async routes."""
+        _schedule_email(EmailService.send_welcome(to_email, name))
+
+    @staticmethod
+    async def send_reset_code(to_email: str, name: str, code: str) -> None:
+        html = _build_reset_code_email(name, code)
+        subject = f"Your HackathonFeed reset code: {code}"
+        await _send_async(to_email, subject, html)
 
     @staticmethod
     def send_reset_code_bg(to_email: str, name: str, code: str) -> None:
-        """Schedule a password-reset OTP email (fire-and-forget)."""
-        html = _build_reset_code_email(name, code)
-        subject = f"Your HackathonFeed reset code: {code}"
-        asyncio.create_task(_send_async(to_email, subject, html))
+        """Schedule a password-reset OTP email. Prefer await send_reset_code() in async routes."""
+        _schedule_email(EmailService.send_reset_code(to_email, name, code))
+
+    @staticmethod
+    async def send_plan_upgrade(
+        to_email: str,
+        name: str,
+        plan: SubscriptionPlan,
+        expires_at_str: str | None,
+    ) -> None:
+        html = _build_upgrade_email(name, plan, expires_at_str)
+        plan_info = next((p for p in PLAN_CATALOGUE if p.key == plan), None)
+        plan_label = plan_info.name if plan_info else plan.title()
+        subject = f"You're now on the {plan_label} plan ⚡"
+        await _send_async(to_email, subject, html)
 
     @staticmethod
     def send_plan_upgrade_bg(
@@ -72,12 +95,22 @@ class EmailService:
         plan: SubscriptionPlan,
         expires_at_str: str | None,
     ) -> None:
-        """Schedule a plan-upgrade confirmation email (fire-and-forget)."""
-        html = _build_upgrade_email(name, plan, expires_at_str)
-        plan_info = next((p for p in PLAN_CATALOGUE if p.key == plan), None)
-        plan_label = plan_info.name if plan_info else plan.title()
-        subject = f"You're now on the {plan_label} plan ⚡"
-        asyncio.create_task(_send_async(to_email, subject, html))
+        """Schedule a plan-upgrade email. Prefer await send_plan_upgrade() in async routes."""
+        _schedule_email(
+            EmailService.send_plan_upgrade(to_email, name, plan, expires_at_str),
+        )
+
+
+def _schedule_email(coro) -> None:
+    """
+    Best-effort background scheduling for sync call sites.
+    On serverless (Vercel), pending tasks may be dropped — async routes should await instead.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(coro)
+    except RuntimeError:
+        logger.warning("No running event loop — email was not scheduled")
 
 
 # ── HTML template helpers ─────────────────────────────────────────────────────

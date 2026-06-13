@@ -151,7 +151,7 @@ async def verify_payment(
         except Exception:  # noqa: BLE001
             expires_str = str(saved.plan_expires_at)
 
-    EmailService.send_plan_upgrade_bg(
+    await EmailService.send_plan_upgrade(
         saved.email,
         saved.name,
         payload.plan,

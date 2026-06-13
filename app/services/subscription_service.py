@@ -268,7 +268,7 @@ class SubscriptionService:
             except Exception:  # noqa: BLE001
                 expires_str = str(user.plan_expires_at)
 
-        EmailService.send_plan_upgrade_bg(user.email, user.name, plan, expires_str)
+        await EmailService.send_plan_upgrade(user.email, user.name, plan, expires_str)
 
     @staticmethod
     async def claim_plan_upgrade(
