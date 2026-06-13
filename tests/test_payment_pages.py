@@ -32,6 +32,16 @@ class TestBuildPaymentPageUrl:
         assert url.startswith("https://rzp.io/i/abc123?foo=1&")
 
 
+class TestExtractPaymentEmail:
+    def test_top_level_email(self):
+        payment = {"email": "User@Example.com", "notes": {}}
+        assert SubscriptionService._extract_payment_email(payment) == "user@example.com"
+
+    def test_notes_email_fallback(self):
+        payment = {"notes": {"email": "notes@example.com"}}
+        assert SubscriptionService._extract_payment_email(payment) == "notes@example.com"
+
+
 class TestWebhookSignature:
     def test_valid_signature_passes(self, monkeypatch):
         secret = "whsec_test"

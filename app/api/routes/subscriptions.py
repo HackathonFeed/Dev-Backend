@@ -16,6 +16,7 @@ from app.schemas.subscription_schema import (
     PaymentPageResponse,
     PlanInfo,
     SubscriptionStatusResponse,
+    UpgradePlanRequest,
     VerifyPaymentRequest,
     get_plan_catalogue,
 )
@@ -68,6 +69,24 @@ async def razorpay_webhook(request: Request, db: AsyncSession = Depends(get_db))
     payload = json.loads(body)
     await SubscriptionService.handle_payment_page_webhook(payload, db)
     return {"status": "ok"}
+
+
+@router.post("/claim-upgrade", response_model=APIResponse[SubscriptionStatusResponse])
+async def claim_upgrade(
+    payload: UpgradePlanRequest,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify a recent Razorpay payment for the logged-in user and apply the plan upgrade.
+    Called by the frontend after Payment Page checkout (fallback if webhook is delayed).
+    """
+    data = await SubscriptionService.claim_plan_upgrade(current_user, payload.plan, db)
+    return APIResponse(
+        success=True,
+        message=f"Upgraded to {payload.plan} plan.",
+        data=data,
+    )
 
 
 @router.post("/consume-project-view", response_model=APIResponse[SubscriptionStatusResponse])
